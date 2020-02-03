@@ -1,13 +1,15 @@
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Error};
+use std::result::Result;
 
 fn main() {
-  let stdin = io::stdin();
-  let freq: Vec<_> = stdin
+  let result_freq: i32 = io::stdin()
     .lock()
     .lines()
-    .map(|line| -> i32 {
+    .map(|line: Result<String, Error>| -> i32 {
       line.unwrap_or_default().parse::<i32>().unwrap_or_default()
     })
-    .collect();
-  println!("Total {} lines", freq.len());
+    .collect::<Vec<_>>()
+    .iter()
+    .sum();
+  println!("{}", result_freq);
 }
