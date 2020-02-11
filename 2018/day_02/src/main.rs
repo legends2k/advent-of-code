@@ -1,7 +1,7 @@
 use std::io::{self, BufRead};
 
 fn main() {
-  let box_ids: Vec<String> =
+  let mut box_ids: Vec<String> =
     io::stdin().lock().lines().map(|l| l.unwrap()).collect();
 
   // part 1
@@ -21,14 +21,40 @@ fn main() {
       [acc[0] + s[0] as u16, acc[1] + s[1] as u16]
     });
   println!("checksum: {}", count[0] as u16 * count[1] as u16);
+
+  // part 2
+  box_ids.sort_unstable();
+  let s = box_ids
+    .windows(2)
+    .find_map(|pair| fuzzy_intersection(&pair[0], &pair[1]))
+    .unwrap();
+  println!("common in box IDs: {}", s);
+}
+
+/// Returns intersection of string slices if their Levenshtein distance is ≤ 1.
+fn fuzzy_intersection(s1: &str, s2: &str) -> Option<String> {
+  let mut intersection = String::with_capacity(s1.len());
+  let mut mismatches = (s1.len() as isize - s2.len() as isize).abs();
+  for (c1, c2) in s1.chars().zip(s2.chars()) {
+    if mismatches > 1 {
+      return None;
+    }
+    if c1 != c2 {
+      mismatches += 1;
+    } else {
+      intersection.push(c1);
+    }
+  }
+  Some(intersection)
 }
 
 /// Return the Levenshtein distance between two string slices
-/// which is always ≥ 0.  Codomain: [0, max(s1.len(), s2.len())]
+/// which is always ≥ 0.  Codomain: [0, max(s1.len(), s2.len())].
+#[allow(dead_code)]
 fn levenshtein(s1: &str, s2: &str) -> u32 {
   let len_diff = (s1.len() as isize - s2.len() as isize).abs();
   s1.chars()
     .zip(s2.chars()) // add one if the chars are different
-    .fold(0, |diff, c| diff + (c.0 != c.1) as u32)
+    .fold(0, |diff, (c1, c2)| diff + (c1 != c2) as u32)
     + len_diff as u32
 }
