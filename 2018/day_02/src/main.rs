@@ -31,18 +31,20 @@ fn main() {
   println!("common in box IDs: {}", s);
 }
 
-/// Returns intersection of string slices if their Levenshtein distance is ≤ 1.
+/// Returns intersection of equal length string slices if their
+/// Levenshtein distance is ≤ 1.
 fn fuzzy_intersection(s1: &str, s2: &str) -> Option<String> {
+  assert_eq!(s1.len(), s2.len()); // doesn’t work for unequal strings
   let mut intersection = String::with_capacity(s1.len());
   let mut mismatches = (s1.len() as isize - s2.len() as isize).abs();
   for (c1, c2) in s1.chars().zip(s2.chars()) {
-    if mismatches > 1 {
-      return None;
-    }
     if c1 != c2 {
       mismatches += 1;
     } else {
       intersection.push(c1);
+    }
+    if mismatches > 1 {
+      return None;
     }
   }
   Some(intersection)
