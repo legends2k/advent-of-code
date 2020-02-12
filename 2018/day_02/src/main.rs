@@ -47,14 +47,3 @@ fn fuzzy_intersection(s1: &str, s2: &str) -> Option<String> {
   }
   Some(intersection)
 }
-
-/// Return the Levenshtein distance between two string slices
-/// which is always ≥ 0.  Codomain: [0, max(s1.len(), s2.len())].
-#[allow(dead_code)]
-fn levenshtein(s1: &str, s2: &str) -> u32 {
-  let len_diff = (s1.len() as isize - s2.len() as isize).abs();
-  s1.chars()
-    .zip(s2.chars()) // add one if the chars are different
-    .fold(0, |diff, (c1, c2)| diff + (c1 != c2) as u32)
-    + len_diff as u32
-}
