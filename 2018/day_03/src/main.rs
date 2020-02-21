@@ -1,6 +1,9 @@
 use std::io::{self, BufRead};
 use std::num::ParseIntError;
+use std::process;
 use std::str::FromStr;
+
+use minifb::{Key, Window, WindowOptions};
 
 //
 //       +------------------------------+     +----------+
@@ -91,10 +94,64 @@ impl FromStr for Rect {
   }
 }
 
+const WIDTH: usize = 1000;
+const HEIGHT: usize = 1000;
+
+fn draw(canvas: &mut Vec<u32>, r: &Rect) {
+  let w = r.width();
+  let offset = r.left_top.1 * WIDTH as i32 + r.left_top.0;
+  let c = vec![0x80ff0000; w as usize];
+  for i in 0..r.height() {
+    let o = (offset + i * WIDTH as i32) as usize;
+    canvas.splice(o..(o + w as usize), c.iter().cloned());
+  }
+}
+
+fn draw_rects(canvas: &mut Vec<u32>, rects: &Vec<Rect>) {
+  for r in rects {
+    draw(canvas, r);
+  }
+}
+
 fn main() {
-  let rects: Vec<Rect> = io::stdin()
+  let mut rects: Vec<Rect> = io::stdin()
     .lock()
     .lines()
     .map(|lo| Rect::from_str(&lo.unwrap()).unwrap())
     .collect();
+
+  rects.sort_unstable_by(|a, b| b.right_bot.0.cmp(&a.right_bot.0));
+  println!("\n{:?}", rects[0]);
+  println!("\n{:?}", rects[1]);
+  println!("\n{:?}", rects[2]);
+  println!("\n{:?}", rects[3]);
+
+  let mut canvas = vec![0u32; WIDTH * HEIGHT];
+  draw_rects(&mut canvas, &rects);
+
+  let mut window = Window::new(
+    "Intersection",
+    WIDTH,
+    HEIGHT,
+    WindowOptions {
+      title: true,
+      resize: false,
+      borderless: false,
+      scale: minifb::Scale::X1,
+      scale_mode: minifb::ScaleMode::Center,
+    },
+  )
+  .unwrap_or_else(|e| {
+    println!("error opening window\n{}", e);
+    process::exit(1);
+  });
+
+  while window.is_open() && !window.is_key_down(Key::Escape) {
+    window
+      .update_with_buffer(&canvas, WIDTH, HEIGHT)
+      .unwrap_or_else(|e| {
+        println!("error drawing to window\n{}", e);
+        process::exit(1);
+      });
+  }
 }

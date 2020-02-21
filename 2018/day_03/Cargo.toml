@@ -3,3 +3,6 @@ name = "day_03"
 version = "0.1.0"
 authors = ["Sundaram Ramaswamy <legends2k@yahoo.com>"]
 edition = "2018"
+
+[dependencies]
+minifb = "*"
