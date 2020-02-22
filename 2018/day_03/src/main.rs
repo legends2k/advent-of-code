@@ -91,10 +91,37 @@ impl FromStr for Rect {
   }
 }
 
+const MAX_WIDTH: usize = 1000;
+const MAX_HEIGHT: usize = 1000;
+
+fn draw(canvas: &mut Vec<u8>, r: &Rect) {
+  let offset = r.left_top.1 * MAX_WIDTH as i32 + r.left_top.0;
+  for i in 0..r.height() {
+    for j in 0..r.width() {
+      let o = (j + offset + i * MAX_WIDTH as i32) as usize;
+      canvas[o] += 1;
+    }
+  }
+}
+
+fn count_intersections(canvas: &Vec<u8>) -> u32 {
+  canvas.iter().fold(0, |acc, x| acc + ((x > &1) as u32))
+}
+
 fn main() {
   let rects: Vec<Rect> = io::stdin()
     .lock()
     .lines()
     .map(|lo| Rect::from_str(&lo.unwrap()).unwrap())
     .collect();
+
+  let mut canvas = vec![0u8; MAX_WIDTH * MAX_HEIGHT];
+  for r in rects {
+    draw(&mut canvas, &r);
+  }
+
+  println!(
+    "intersection area = {} sq. inch",
+    count_intersections(&canvas)
+  );
 }
