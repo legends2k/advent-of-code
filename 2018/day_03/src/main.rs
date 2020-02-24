@@ -100,10 +100,23 @@ const HEIGHT: usize = 1000;
 fn draw(canvas: &mut Vec<u32>, r: &Rect) {
   let w = r.width();
   let offset = r.left_top.1 * WIDTH as i32 + r.left_top.0;
+
+  // draw top
   let c = vec![0x80ff0000; w as usize];
-  for i in 0..r.height() {
+  let mut o = offset as usize;
+  // 3; 5 -> 3, 4, 5, 6, 7
+  canvas.splice(o..(o + w as usize), c.iter().cloned());
+
+  //draw bottom
+  o = (offset + (r.height() - 1) * WIDTH as i32) as usize;
+  canvas.splice(o..(o + w as usize), c.iter().cloned());
+
+  // draw sides
+  for i in 1..r.height() {
     let o = (offset + i * WIDTH as i32) as usize;
-    canvas.splice(o..(o + w as usize), c.iter().cloned());
+    canvas[o] = 0x80ff0000;
+    canvas[o - 1 + w as usize] = 0x80ff0000;
+    // canvas.splice(o..(o + w as usize), c.iter().cloned());
   }
 }
 
@@ -130,7 +143,7 @@ fn main() {
   draw_rects(&mut canvas, &rects);
 
   let mut window = Window::new(
-    "Intersection",
+    "Areas claimed by Santa's Elves",
     WIDTH,
     HEIGHT,
     WindowOptions {
