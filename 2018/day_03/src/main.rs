@@ -108,6 +108,18 @@ fn count_intersections(canvas: &Vec<u8>) -> u32 {
   canvas.iter().fold(0, |acc, x| acc + ((x > &1) as u32))
 }
 
+fn in_tact(canvas: &Vec<u8>, r: &Rect) -> bool {
+  // checking the borders to be 1 is good enough
+  let left = r.left_top.0 as usize;
+  let top = r.left_top.1 as usize;
+  let width = r.width() as usize;
+
+  (0..r.height()).all(|y| {
+    let offset = (MAX_WIDTH * (top + y as usize)) + left;
+    canvas[offset..(offset + width)].iter().all(|&c| c == 1u8)
+  })
+}
+
 fn main() {
   let rects: Vec<Rect> = io::stdin()
     .lock()
@@ -116,12 +128,20 @@ fn main() {
     .collect();
 
   let mut canvas = vec![0u8; MAX_WIDTH * MAX_HEIGHT];
-  for r in rects {
+  for r in &rects {
     draw(&mut canvas, &r);
   }
 
+  // part 1
   println!(
     "intersection area = {} sq. inch",
     count_intersections(&canvas)
   );
+
+  // part 2
+  let unique_rect = rects
+    .iter()
+    .find(|r| in_tact(&canvas, r))
+    .expect("No unique claims!");
+  println!("unique claim = #{}", unique_rect.id);
 }
