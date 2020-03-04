@@ -17,7 +17,7 @@ fn main() {
   // lexicographical ordering; ignore year as they’re all the same
   s.sort_unstable_by(|a, b| a[6..17].cmp(&b[6..17]));
 
-  // part 1: most sleepy guard
+  // parse and digest guard schedules
   let mut guard_schedule: HashMap<GuardId, GuardSchedule> = HashMap::new();
   let mut id = 0u16;
   let mut slept_at = 0u8;
@@ -34,8 +34,37 @@ fn main() {
       _ => (),
     }
   }
+
+  // part 1
+  strategy1(&guard_schedule);
+}
+
+fn strategy1(guard_schedule: &HashMap<GuardId, GuardSchedule>) {
   let most_slept = guard_schedule
     .iter()
     .max_by(|a, b| a.1.asleep_dur.cmp(&b.1.asleep_dur))
     .unwrap();
+  let mut occurances = [0u8; 60];
+  for i in &most_slept.1.sleep_interval {
+    (i.0..i.1).for_each(|i| occurances[i as usize] += 1);
+  }
+  // https://stackoverflow.com/a/58103194/183120
+  let max_idx = occurances
+    .iter()
+    .enumerate()
+    .max_by_key(|(_idx, &val)| val) // find max by val
+    .map(|(idx, _val)| idx); // but obtain idx as result
+  if let Some(idx) = max_idx {
+    println!(
+      "Strategy 1 \
+       \n  Guard #{} slept the most ({} mins); min {} being \
+       the most asleep ({} out of {} times).\n  Result: {}",
+      most_slept.0,
+      most_slept.1.asleep_dur,
+      idx,
+      occurances[idx],
+      most_slept.1.sleep_interval.len(),
+      *most_slept.0 * idx as u16
+    );
+  }
 }
