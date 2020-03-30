@@ -2,23 +2,82 @@ use std::io::Error;
 use std::io::{self, BufRead};
 use std::str::FromStr;
 
-#[derive(Copy, Clone, Debug)]
-struct Point(i16, i16);
+type LocId = usize;
+type Dist = i16;
+type LocDist = (LocId, Dist);
 
 #[derive(Copy, Clone, Debug)]
-struct Location {
-  id: i32,
-  pt: Point,
+struct Point(Dist, Dist);
+
+impl Point {
+  fn taxicab_dist(&self, other: Point) -> Dist {
+    ((self.0 - other.0).abs() + (self.1 - other.1).abs()) as Dist
+  }
 }
 
 impl FromStr for Point {
   type Err = Error;
   fn from_str(s: &str) -> Result<Point, Error> {
-    let coords: Vec<i16> = s
+    let coords: Vec<Dist> = s
       .splitn(2, ',')
       .map(|s| s.trim().parse().unwrap_or_default())
       .collect();
     Ok(Point(coords[0], coords[1]))
+  }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct Location {
+  id: LocId,
+  pt: Point,
+}
+
+struct Map {
+  locs: Vec<Location>,
+  left: Dist,
+  top: Dist,
+  right: Dist,
+  bottom: Dist,
+}
+
+impl Map {
+  // X → and Y ↓
+
+  fn new(locs: Vec<Location>) -> Self {
+    let left = locs
+      .iter()
+      .min_by_key(|&loc| loc.pt.0)
+      .map(|&loc| loc.pt.0)
+      .unwrap();
+    let right = locs
+      .iter()
+      .max_by_key(|&loc| loc.pt.0)
+      .map(|&loc| loc.pt.0)
+      .unwrap();
+    let top = locs
+      .iter()
+      .min_by_key(|&loc| loc.pt.1)
+      .map(|&loc| loc.pt.1)
+      .unwrap();
+    let bottom = locs
+      .iter()
+      .max_by_key(|&loc| loc.pt.1)
+      .map(|&loc| loc.pt.1)
+      .unwrap();
+    Map {
+      locs,
+      left,
+      top,
+      right,
+      bottom,
+    }
+  }
+
+  fn is_on_edge(&self, pt: Point) -> bool {
+    (pt.0 == self.left)
+      || (pt.0 == self.right)
+      || (pt.1 == self.top)
+      || (pt.1 == self.bottom)
   }
 }
 
@@ -28,22 +87,40 @@ fn main() {
     .lines()
     .enumerate()
     .map(|(id, l)| Location {
-      id: id as i32,
+      id: id,
       pt: l.unwrap_or_default().parse().unwrap(),
     })
     .collect();
+  let map = Map::new(locs);
 
-  let mut ids_x_sorted: Vec<usize> = (0..locs.len()).collect();
-  ids_x_sorted.sort_unstable_by_key(|id| locs[*id].pt.0);
-  let mut ids_y_sorted = ids_x_sorted.clone();
-  ids_y_sorted.sort_unstable_by_key(|id| locs[*id].pt.1);
+  // map of loc id and count
+  let mut loc_freq = vec![0.0f32; map.locs.len()];
+  for row in map.top..=map.bottom {
+    for col in map.left..=map.right {
+      let pt = Point(col, row);
+      let mut candidates: Vec<LocDist> = map
+        .locs
+        .iter()
+        .map(|l| (l.id, l.pt.taxicab_dist(pt)))
+        .collect();
+      candidates.sort_unstable_by_key(|&(_id, dist)| dist);
+      // if not a tie between two locations
+      if candidates[0].1 != candidates[1].1 {
+        if map.is_on_edge(pt) {
+          loc_freq[candidates[0].0] = std::f32::INFINITY;
+        } else {
+          loc_freq[candidates[0].0] += 1.0;
+        }
+      }
+    }
+  }
 
-  // X → and Y ↓
-  let left = locs[ids_x_sorted[0]].pt.0;
-  let right = locs[*ids_x_sorted.last().unwrap()].pt.0;
-  let top = locs[ids_y_sorted[0]].pt.1;
-  let bottom = locs[*ids_y_sorted.last().unwrap()].pt.1;
-
-  let width = (right - left + 1) as usize;
-  let height = (bottom - top + 1) as usize;
+  // check for maximum frequency; skip ∞ cases
+  if let Some((id, freq)) = loc_freq
+    .iter()
+    .enumerate() // not filtering ±∞ as they get converted to 0
+    .max_by_key(|(_id, &freq)| freq as u16)
+  {
+    println!("Location #{} with largest areas: {} spots", id, freq);
+  }
 }
