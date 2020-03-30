@@ -93,6 +93,9 @@ fn main() {
     .collect();
   let map = Map::new(locs);
 
+  const DIST_SUM_THRESHOLD: i16 = 10000;
+  let mut fav_region_size = 0u16;
+
   // map of loc id and count
   let mut loc_freq = vec![0.0f32; map.locs.len()];
   for row in map.top..=map.bottom {
@@ -103,6 +106,8 @@ fn main() {
         .iter()
         .map(|l| (l.id, l.pt.taxicab_dist(pt)))
         .collect();
+
+      // part 1
       candidates.sort_unstable_by_key(|&(_id, dist)| dist);
       // if not a tie between two locations
       if candidates[0].1 != candidates[1].1 {
@@ -111,6 +116,12 @@ fn main() {
         } else {
           loc_freq[candidates[0].0] += 1.0;
         }
+      }
+
+      // part 2
+      let dist_sum: i16 = candidates.iter().map(|(_id, dist)| *dist).sum();
+      if dist_sum < DIST_SUM_THRESHOLD {
+        fav_region_size += 1;
       }
     }
   }
@@ -121,6 +132,10 @@ fn main() {
     .enumerate() // not filtering ±∞ as they get converted to 0
     .max_by_key(|(_id, &freq)| freq as u16)
   {
-    println!("Location #{} with largest areas: {} spots", id, freq);
+    println!("Location #{} has the largest area: {} spots", id, freq);
   }
+  println!(
+    "Spots with Σ taxicab distance < {}: {}",
+    DIST_SUM_THRESHOLD, fav_region_size
+  );
 }
