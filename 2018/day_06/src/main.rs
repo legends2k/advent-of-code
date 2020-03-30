@@ -93,7 +93,7 @@ fn main() {
     .collect();
   let map = Map::new(locs);
 
-  const DIST_SUM_THRESHOLD: i16 = 10000;
+  const DIST_SUM_THRESHOLD: i16 = 10_000;
   let mut fav_region_size = 0u16;
 
   // map of loc id and count
