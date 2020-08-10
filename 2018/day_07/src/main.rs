@@ -13,7 +13,6 @@ enum Status {
 struct Task {
   status: Status,
   awaiting: u8,
-  end_time: u16,
   // Inversion of control: dependants instead of dependencies
   // https://en.wikipedia.org/wiki/Inversion_of_control
   // https://stackoverflow.com/q/5792966/183120
@@ -25,7 +24,6 @@ impl Default for Task {
     Task {
       status: Status::Uninitialized,
       awaiting: 0,
-      end_time: 0,
       dependants: Vec::<u8>::with_capacity(5),
     }
   }
@@ -36,7 +34,6 @@ impl Clone for Task {
     Task {
       status: self.status,
       awaiting: self.awaiting,
-      end_time: self.end_time,
       dependants: self.dependants.clone(),
     }
   }
@@ -63,6 +60,7 @@ fn perform(task_id: u8, tasks: &mut [Task]) {
 #[derive(Default)]
 struct ThreadContext {
   task_id: Option<u8>,
+  eta: u16,
 }
 
 const TOTAL_THREADS: usize = 5;
@@ -214,11 +212,11 @@ fn main() -> Result<(), ParseCharError> {
 
       while free_threads > 0 && !available_tasks.is_empty() {
         let task_id = available_tasks.pop().unwrap();
-        // map A to 61 and enter end time upfront; later used for sorting
-        // and hand-off
-        tasks[task_id as usize].end_time = time + task_id as u16 + 61;
         let thread = it.next().unwrap();
         thread.task_id = Some(task_id);
+        // map A to 61 and store end time upfront; useful in selecting
+        // the right thread by ordering w.r.t task end time
+        thread.eta = time + task_id as u16 + 61;
         tasks[task_id as usize].status = Status::Running;
         free_threads -= 1;
       }
@@ -229,10 +227,10 @@ fn main() -> Result<(), ParseCharError> {
       .threads
       .iter_mut()
       .filter(|t| t.task_id.is_some())
-      .min_by_key(|t| tasks[t.task_id.unwrap() as usize].end_time)
+      .min_by_key(|t| t.eta)
     {
       let task_id = ready_thread.task_id.unwrap();
-      time = tasks[task_id as usize].end_time;
+      time = ready_thread.eta;
       perform(task_id, &mut tasks);
       ready_thread.task_id = None;
     }
