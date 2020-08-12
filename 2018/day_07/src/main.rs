@@ -1,4 +1,4 @@
-use std::char::ParseCharError;
+use std::error::Error;
 use std::io::{self, BufRead};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -128,7 +128,9 @@ impl<'a> Iterator for FreeThreadIterator<'a> {
 //   }
 // }
 
-fn main() -> Result<(), ParseCharError> {
+// https://nick.groenen.me/posts/rust-error-handling/
+// https://blog.burntsushi.net/rust-error-handling/
+fn main() -> Result<(), Box<dyn Error>> {
   // Array of T initialization, when T ≠ Copy
   // https://www.joshmcguigan.com/blog/array-initialization-rust/
   let mut tasks: [Task; 26] = Default::default();
@@ -136,7 +138,7 @@ fn main() -> Result<(), ParseCharError> {
   // parse input and form dependency graph
   const INSTRUCTION_LENGTH: usize = 48;
   for l in io::stdin().lock().lines() {
-    let line = l.unwrap();
+    let line = l?;
     if line.len() != INSTRUCTION_LENGTH {
       panic!(
         "Incorrect instruction length; expected {}",
