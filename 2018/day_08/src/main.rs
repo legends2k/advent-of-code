@@ -64,6 +64,31 @@ where
   })
 }
 
+fn node_value(tree: &Vec<Node>, idx: u16) -> u32 {
+  let mut stack = Vec::<u16>::with_capacity(tree.len());
+  let mut value: u32 = 0;
+  stack.push(idx);
+  while !stack.is_empty() {
+    let n = stack.pop().unwrap();
+    let node = &tree[n as usize];
+    // NOTE: memoization opportunity; since child indices can repeat in
+    // metadata, store node value once computed to avoid recalculation
+    if node.children.is_empty() {
+      value += node.metadata.iter().sum::<u16>() as u32;
+    } else {
+      stack.extend(
+        node
+          .metadata
+          .iter()
+          .map(|i| i - 1)
+          .filter(|&i| i < node.children.len() as u16)
+          .map(|i| node.children[i as usize]),
+      );
+    }
+  }
+  value
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
   let stdin = io::stdin();
   let mut iter = stdin.lock().split(b' ').peekable();
@@ -109,6 +134,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .iter()
     .fold(0u32, |acc, n| acc + n.metadata.iter().sum::<u16>() as u32);
   println!("Sum of metadata entries: {}", metadata_sum);
+  println!("Value of root node: {}", node_value(&nodes, 0));
 
   Ok(())
 }
