@@ -68,17 +68,17 @@ fn main() -> Result<(), Box<dyn Error>> {
   let stdin = io::stdin();
   let mut iter = stdin.lock().split(b' ').peekable();
 
-  let mut parsing_nodes = Vec::<NodeHeader>::with_capacity(256);
+  let mut stack = Vec::<NodeHeader>::with_capacity(256);
   let mut nodes = Vec::<Node>::with_capacity(256);
   while iter.peek().is_some() {
-    let is_header = match parsing_nodes.last() {
+    let is_header = match stack.last() {
       Some(node_header) => node_header.child_count > 0,
       None => true,
     };
     // print!("Header: {}\t", is_header);
     if is_header {
       let id = nodes.len() as u16;
-      if let Some(parent) = parsing_nodes.last_mut() {
+      if let Some(parent) = stack.last_mut() {
         nodes[parent.node_id as usize].children.push(id);
       }
       let header = read_header(&mut iter, id)?;
@@ -87,29 +87,28 @@ fn main() -> Result<(), Box<dyn Error>> {
         header.metadata_count as usize,
         header.child_count as usize,
       ));
-      parsing_nodes.push(header);
+      stack.push(header);
     } else {
       let metadata = read_number(&mut iter)?;
-      let node_header = parsing_nodes.last_mut().unwrap();
+      // use unwrap as we’re sure the stack has an element
+      let node_header = stack.last_mut().unwrap();
       nodes[node_header.node_id as usize].metadata.push(metadata);
       // println!("  metadata: {} for {}\t", metadata, node_header.node_id);
       node_header.metadata_count -= 1;
       if node_header.metadata_count == 0 {
-        parsing_nodes.pop();
-        if let Some(parent) = parsing_nodes.last_mut() {
+        stack.pop();
+        if let Some(parent) = stack.last_mut() {
           parent.child_count -= 1;
         }
       }
     }
   }
+  debug_assert!(stack.is_empty());
 
   let metadata_sum = nodes
     .iter()
     .fold(0u32, |acc, n| acc + n.metadata.iter().sum::<u16>() as u32);
   println!("Sum of metadata entries: {}", metadata_sum);
-  // let v1 = read_header(&mut iter);
-  // let v2 = read_header(&mut iter);
-  // println!("{:?}\n{:?}", v1, v2);
 
   Ok(())
 }
