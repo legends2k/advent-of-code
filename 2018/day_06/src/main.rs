@@ -17,7 +17,7 @@ impl Point {
 
 impl FromStr for Point {
   type Err = Error;
-  fn from_str(s: &str) -> Result<Point, Error> {
+  fn from_str(s: &str) -> Result<Point, Self::Err> {
     let coords: Vec<Dist> = s
       .splitn(2, ',')
       .map(|s| s.trim().parse().unwrap_or_default())
