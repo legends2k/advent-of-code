@@ -2,8 +2,6 @@ use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::io::{self, ErrorKind};
 
-use std::collections::HashMap;
-
 type Data = u32;
 
 #[derive(Debug)]
@@ -162,18 +160,18 @@ impl Debug for CircularList {
   }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn game(
+  n_players: u32,
+  max_marble: u32,
+) -> Result<Option<u32>, Box<dyn Error>> {
   let mut circle = CircularList::new();
   circle.append(0);
 
-  let mut player_score = HashMap::new();
-
-  let mut player = 0;
-  const N_PLAYERS: u32 = 426;
-  const MARBLE_VALUE_MAX: u32 = 72058;
+  let mut scores: Vec<u32> = (0..n_players).map(|_| 0).collect();
+  let mut player = 0_u32;
   let mut marble_value = 1;
 
-  while marble_value <= MARBLE_VALUE_MAX {
+  while marble_value <= max_marble {
     if (marble_value % 23) != 0 {
       let idx =
         circle.insert_after(circle.nth(circle.first, 1)?, marble_value)?;
@@ -181,22 +179,32 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
       let del = circle.nth(circle.first, -7)?;
       let removed_marble_value = circle.data(del)?;
-      let score = player_score.entry(player).or_insert(0);
-      *score += marble_value + removed_marble_value;
+      scores[player as usize] += marble_value + removed_marble_value;
       let new_current = circle.delete(del)?;
       if new_current.is_some() {
         circle.set_first(new_current.unwrap())?;
       }
     }
-    player = (player + 1) % N_PLAYERS;
+    player = (player + 1) % n_players;
     marble_value += 1;
   }
 
-  if let Some((player, score)) =
-    player_score.iter().max_by_key(|(_, &score)| score)
-  {
-    println!("Player {}: {}", player + 1, score);
+  if let Some(score) = scores.iter().max() {
+    Ok(Some(*score))
+  } else {
+    Ok(None)
   }
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+  println!(
+    "Game 1 hi-score: {}",
+    game(426 /*n_players*/, 72058 /*max_marble*/)?.unwrap()
+  );
+  println!(
+    "Game 2 hi-score: {}",
+    game(426 /*n_players*/, 72058 * 100 /*max_marble*/)?.unwrap()
+  );
 
   Ok(())
 }
