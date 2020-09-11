@@ -2,6 +2,8 @@ use std::error::Error;
 use std::fmt::{Debug, Formatter};
 use std::io::{self, ErrorKind};
 
+use std::collections::HashMap;
+
 type Data = u32;
 
 #[derive(Debug)]
@@ -26,7 +28,7 @@ impl CircularList {
   }
 
   // inserts data between last and first, becoming the new last
-  fn append(&mut self, data: Data) {
+  fn append(&mut self, data: Data) -> usize {
     let mut next = 0;
     let mut prev = 0;
     let n = self.list.len();
@@ -46,6 +48,7 @@ impl CircularList {
       next: next,
       prev: prev,
     }));
+    n
   }
 
   // NOTE: ‘append’ can be generalized into ‘insert_after’
@@ -54,7 +57,7 @@ impl CircularList {
     &mut self,
     idx: usize,
     data: Data,
-  ) -> Result<(), Box<dyn Error>> {
+  ) -> Result<usize, Box<dyn Error>> {
     if idx >= self.list.len() || self.list[idx].is_none() {
       return Err(Box::new(io::Error::new(
         ErrorKind::NotFound,
@@ -70,10 +73,11 @@ impl CircularList {
     }));
     self.list[idx].as_mut().unwrap().next = n;
     self.list[my_next].as_mut().unwrap().prev = n;
-    Ok(())
+    Ok(n)
   }
 
-  fn delete(&mut self, idx: usize) -> Result<(), Box<dyn Error>> {
+  // returns the index of node next to the deleted, if theres’s one
+  fn delete(&mut self, idx: usize) -> Result<Option<usize>, Box<dyn Error>> {
     if idx >= self.list.len() || self.list[idx].is_none() {
       return Err(Box::new(io::Error::new(
         ErrorKind::NotFound,
@@ -86,7 +90,7 @@ impl CircularList {
     {
       self.list.clear();
       self.first = 0;
-      return Ok(());
+      return Ok(None);
     }
 
     let node_del = self.list[idx].as_ref().unwrap();
@@ -101,7 +105,7 @@ impl CircularList {
       self.first = next;
     }
     self.list[idx] = None;
-    Ok(())
+    Ok(Some(next))
   }
 
   // returns ±n-th node from given node
@@ -159,28 +163,40 @@ impl Debug for CircularList {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let mut cl = CircularList::new();
-  cl.append(21);
-  cl.append(30);
-  println!("{}: {:?}", cl.first, cl);
-  cl.delete(0)?;
-  println!("{}: *{:?}*", cl.first, cl);
-  cl.append(45);
-  println!("{}: *{:?}*", cl.first, cl);
-  cl.append(4);
-  println!("{}: *{:?}*", cl.first, cl);
+  let mut circle = CircularList::new();
+  circle.append(0);
 
-  println!("** {} **", cl.data(cl.nth(cl.first, 2).unwrap())?);
-  println!("** {} **", cl.data(cl.nth(2, -1).unwrap())?);
+  let mut player_score = HashMap::new();
 
-  cl.insert_after(cl.first, 99)?;
-  println!("{}: *{:?}*", cl.first, cl);
+  let mut player = 0;
+  const N_PLAYERS: u32 = 426;
+  const MARBLE_VALUE_MAX: u32 = 72058;
+  let mut marble_value = 1;
 
-  cl.delete(cl.first)?;
-  println!("{}: *{:?}*", cl.first, cl);
-  cl.delete(cl.first)?;
-  println!("{}: *{:?}*", cl.first, cl);
-  cl.delete(cl.first)?;
-  println!("{}: *{:?}*", cl.first, cl);
+  while marble_value <= MARBLE_VALUE_MAX {
+    if (marble_value % 23) != 0 {
+      let idx =
+        circle.insert_after(circle.nth(circle.first, 1)?, marble_value)?;
+      circle.set_first(idx)?;
+    } else {
+      let del = circle.nth(circle.first, -7)?;
+      let removed_marble_value = circle.data(del)?;
+      let score = player_score.entry(player).or_insert(0);
+      *score += marble_value + removed_marble_value;
+      let new_current = circle.delete(del)?;
+      if new_current.is_some() {
+        circle.set_first(new_current.unwrap())?;
+      }
+    }
+    player = (player + 1) % N_PLAYERS;
+    marble_value += 1;
+  }
+
+  if let Some((player, score)) =
+    player_score.iter().max_by_key(|(_, &score)| score)
+  {
+    println!("Player {}: {}", player + 1, score);
+  }
+
   Ok(())
 }
