@@ -1,6 +1,8 @@
 use std::env;
 use std::process;
 
+const SIZE: i32 = 300;
+
 fn main() {
   let serial: i32 = env::args()
     .nth(1)
@@ -14,7 +16,7 @@ fn main() {
       process::exit(1);
     });
 
-  const SIZE: i32 = 300;
+  // compute cell powers
   let mut cells = [0; (SIZE * SIZE) as usize];
   for row in 0..SIZE {
     for col in 0..SIZE {
@@ -24,12 +26,17 @@ fn main() {
     }
   }
 
+  max_3x3(&cells);
+}
+
+fn max_3x3(cells: &[i32; (SIZE * SIZE) as usize]) {
   // compute cumulative powers in cache-friendly way
   // compute cumulative X powers
+  let mut cells_3x3 = *cells;
   for row in 0..(SIZE - 2) {
     for col in 0..(SIZE - 2) {
       let idx = (row * SIZE + col) as usize;
-      cells[idx] += cells[idx + 1] + cells[idx + 2];
+      cells_3x3[idx] += cells_3x3[idx + 1] + cells_3x3[idx + 2];
     }
   }
 
@@ -37,13 +44,14 @@ fn main() {
   for col in 0..(SIZE - 2) {
     for row in 0..(SIZE - 2) {
       let idx = (row * SIZE + col) as usize;
-      cells[idx] += cells[idx + SIZE as usize] + cells[idx + SIZE as usize * 2];
+      cells_3x3[idx] +=
+        cells_3x3[idx + SIZE as usize] + cells_3x3[idx + SIZE as usize * 2];
     }
   }
 
-  if let Some((i, _)) = cells.iter().enumerate().max_by_key(|(_, &x)| x) {
+  if let Some((i, _)) = cells_3x3.iter().enumerate().max_by_key(|(_, &x)| x) {
     let row = i as i32 / SIZE;
     let col = i as i32 - row * SIZE;
-    println!("Maximum powered square at {},{}", col + 1, row + 1);
+    println!("Maximum 3x3 powered square at {},{}", col + 1, row + 1);
   }
 }
