@@ -108,26 +108,76 @@ impl fmt::Debug for Plants {
   }
 }
 
-fn generations(plants: &Plants, rules: &[bool; 32], iterations: u64) {
+impl fmt::Display for Plants {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "{}",
+      self
+        .pot
+        .iter()
+        .map(|x| match x {
+          true => '#',
+          false => '.',
+        })
+        .collect::<String>()
+    )
+  }
+}
+
+fn generations(plants: &Plants, rules: &[bool; 32], count: u64) {
   let mut cur_gen = plants.clone();
   let mut next_gen = cur_gen.clone();
   // println!("Pots now\n{:?}", plants);
-  for _ in 1..=iterations {
+  const SIMILARITY_THRESHOLD: u8 = 5;
+  let mut similarity_count = 0;
+  let mut short_circuit_gen = 0u64;
+  for gen in 1..=count {
     // start checking for germination from current interval ± 3 pots
     for i in (cur_gen.front() - 3)..=(cur_gen.back() + 3) {
       next_gen.set(i, rules[cur_gen.pot_configuration(i) as usize]);
     }
     // remove needless elements due to previous set()s
     next_gen.trim();
+
+    // try short-circuiting for very large generation |count|
+    if next_gen.pot == cur_gen.pot {
+      similarity_count += 1;
+      if similarity_count == SIMILARITY_THRESHOLD {
+        short_circuit_gen = gen;
+        break;
+      }
+    } else if similarity_count != 0 {
+      similarity_count = 0;
+    }
+
     // avoid needless allocation; reuse same objects with their internals
     std::mem::swap(&mut cur_gen, &mut next_gen);
   }
-  // println!("Pots after {} generations\n{:?}", iterations, cur_gen);
-  println!(
-    "Sum of planted pot IDs after {} generations: {}",
-    iterations,
-    cur_gen.sum_planted_pot_id()
-  );
+  if similarity_count == SIMILARITY_THRESHOLD {
+    println!(
+      "Generational similarity exceeded threashold.  \
+       Stopped simulation at generation {} and short-circuited",
+      short_circuit_gen
+    );
+    // Calculate the difference in sum of planted pot IDs from next to current
+    // generation; flip operands of minus as we’ve swapped them earlier
+    let generational_delta =
+      next_gen.sum_planted_pot_id() - cur_gen.sum_planted_pot_id();
+    let pending_generations = count - short_circuit_gen;
+    println!(
+      "Sum of planted pot IDs after {} generations: {}",
+      count,
+      cur_gen.sum_planted_pot_id() as u64
+        + pending_generations * generational_delta as u64
+    );
+  } else {
+    println!(
+      "Sum of planted pot IDs after {} generations: {}",
+      count,
+      cur_gen.sum_planted_pot_id()
+    );
+  }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -158,7 +208,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   );
 
   // Part 1: germinate pots for 20 generations
-  generations(&plants, &rules, 20);
+  generations(&plants, &rules, /*count*/ 20);
+
+  // Part 2: germinate pots for 50000000000 generations
+  generations(&plants, &rules, /*count*/ 50000000000);
 
   Ok(())
 }
