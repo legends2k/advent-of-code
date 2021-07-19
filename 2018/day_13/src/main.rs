@@ -109,9 +109,15 @@ impl Map {
   }
 }
 
-fn update(map: &Map, carts: &mut [Cart]) -> Result<(), Point> {
+fn update(map: &Map, carts: &mut [Cart]) -> Option<Vec<Point>> {
+  let mut collision_pts = Vec::<Point>::new();
   let n = carts.len();
   for i in 0..n {
+    // Handle intra-step collisions; skip processing if an earlier processed
+    // cart had collided with this in the same step/update.
+    if collision_pts.contains(&carts[i].pos) {
+      continue;
+    }
     let new_pos: Point = carts[i].pos + carts[i].velocity;
     // Check for collision from next cart till previous cart circularly; as we
     // simulate top-bottom-left-right, following carts are probable candidates;
@@ -124,7 +130,7 @@ fn update(map: &Map, carts: &mut [Cart]) -> Result<(), Point> {
       .take(n - 1) // skip self
       .any(|other| other.pos == new_pos)
     {
-      return Err(new_pos);
+      collision_pts.push(new_pos);
     }
     let c = &mut carts[i];
     c.pos = new_pos;
@@ -151,18 +157,23 @@ fn update(map: &Map, carts: &mut [Cart]) -> Result<(), Point> {
       _ => c.last_turn,
     };
   }
-  Ok(())
+  match collision_pts.is_empty() {
+    true => None,
+    false => Some(collision_pts),
+  }
 }
 
 const CART_SYMBOLS: &[u8; 4] = b"<>^v";
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn parse_input() -> Result<(Map, Vec<Cart>), Box<dyn std::error::Error>> {
   // fish carts out of map
   let mut plot = Vec::<u8>::new();
   plot.reserve(25600); // my input is 150x150 bytes
   let mut carts = Vec::<Cart>::new();
   let mut height = 0;
   for (line_idx, l) in io::stdin().lock().lines().enumerate() {
+    // Rust String ↔ &str ↔ &[u8] ↔ Vec<u8> conversions cheatsheet
+    // https://stackoverflow.com/q/41034635/183120
     let mut line: Vec<u8> = l?.into_bytes();
     for ch_idx in 0..line.len() {
       let ch = line[ch_idx];
@@ -178,21 +189,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     height += 1;
   }
   let width = plot.len() / height;
-  let map = Map { plot, width };
+  Ok((Map { plot, width }, carts))
+}
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let (map, mut carts) = parse_input()?;
   let mut ticks = 0;
-  let collision_pt;
   loop {
-    match update(&map, &mut carts) {
-      Ok(_) => carts.sort(),
-      Err(pt) => {
-        collision_pt = pt;
+    // |carts| are already sorted by now (∀ iterations including 0-th)
+    if let Some(collisions) = update(&map, &mut carts) {
+      // Part 1: print first collision site
+      for pt in &collisions {
+        println!("Collision by {}s at {}", ticks, pt);
+      }
+      // prune collided carts
+      carts.retain(|cart| collisions.iter().all(|&pt| pt != cart.pos));
+      if carts.len() == 1 {
         break;
       }
     }
+    carts.sort();
     ticks += 1;
   }
-  println!("Collision by tick {} @ {}", ticks, collision_pt);
+  // Part 2: print last, only unscathed cart
+  println!("Last cart standing at {}", carts[0].pos);
 
   Ok(())
 }
