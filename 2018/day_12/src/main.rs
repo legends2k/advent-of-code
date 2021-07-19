@@ -160,8 +160,7 @@ fn generations(plants: &Plants, rules: &[bool; 32], count: u64) {
        Stopped simulation at generation {} and short-circuited",
       short_circuit_gen
     );
-    // Calculate the difference in sum of planted pot IDs from next to current
-    // generation; flip operands of minus as we’ve swapped them earlier
+    // Calculate difference in sum of planted pot IDs b/w similar generations
     let generational_delta =
       next_gen.sum_planted_pot_id() - cur_gen.sum_planted_pot_id();
     let pending_generations = count - short_circuit_gen;
