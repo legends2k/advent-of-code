@@ -2,13 +2,14 @@ use core::fmt;
 use std::{
   error::Error,
   fmt::Display,
-  io::{stdin, stdout, BufRead, Write},
+  io::{stdin, BufRead},
+  mem,
 };
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 struct Point(u8, u8);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum FighterKind {
   Elf,
   Goblin,
@@ -21,16 +22,19 @@ struct Fighter {
   pos: Point,
 }
 
+#[derive(Copy, Clone)]
 enum Cell {
   Wall,
-  Vacant(u16),
+  Vacant { previous: Point, dist: u16 },
   Occupied { kind: FighterKind, id: u8 },
 }
 
 impl Cell {
+  const MAX: u16 = u16::MAX;
+
   fn is_vacant(&self) -> bool {
     match self {
-      Cell::Vacant(_) => true,
+      Cell::Vacant { .. } => true,
       _ => false,
     }
   }
@@ -41,7 +45,7 @@ impl fmt::Display for Cell {
     // https://stackoverflow.com/q/41390457/183120
     let symbol = match self {
       Cell::Wall => b'#',
-      Cell::Vacant(_) => b'.',
+      Cell::Vacant { .. } => b'.',
       Cell::Occupied {
         kind: FighterKind::Elf,
         ..
@@ -78,8 +82,18 @@ impl Map {
     self.width * pt.1 as usize + pt.0 as usize
   }
 
-  fn cell(&self, pt: Point) -> &Cell {
-    &self.layout[self.point_to_idx(pt)]
+  fn cell(&self, pt: Point) -> Option<Cell> {
+    if pt.0 >= self.width as u8 || pt.1 >= self.height as u8 {
+      return None;
+    }
+    Some(self.layout[self.point_to_idx(pt)])
+  }
+
+  fn is_vacant(&self, pt: Point) -> bool {
+    match self.cell(pt) {
+      Some(x) => x.is_vacant(),
+      None => false,
+    }
   }
 
   fn targets(&self, from: Point) -> Vec<Point> {
@@ -108,13 +122,93 @@ impl Map {
         ];
         let mut targets = Vec::<Point>::with_capacity(4);
         for n in neighbours {
-          if self.cell(n).is_vacant() {
+          if self.is_vacant(n) {
             targets.push(n);
           }
         }
         targets
       })
       .collect()
+  }
+
+  // reset distances stored in vacant cells to default
+  fn clear(&mut self) {
+    self
+      .layout
+      .iter_mut()
+      .filter(|c| c.is_vacant())
+      .for_each(|c| {
+        *c = Cell::Vacant {
+          previous: Point::default(),
+          dist: Cell::MAX,
+        }
+      });
+  }
+
+  fn set(&mut self, p: Point, cell: Cell) {
+    let idx = self.point_to_idx(p);
+    self.layout[idx] = cell;
+  }
+
+  fn next_step(&mut self, src: Point, dsts: &Vec<Point>) -> Option<Point> {
+    self.clear();
+    // loop until all vacancies are visited or one of |dsts| is reached
+    let mut visiting = Vec::<(Point, Point)>::with_capacity(256);
+    let mut to_visit = Vec::<(Point, Point)>::with_capacity(256);
+    // order flipped since Vec::{push, pop} is FILO
+    to_visit.push((Point(src.0, src.1 + 1), src));
+    to_visit.push((Point(src.0 + 1, src.1), src));
+    to_visit.push((Point(src.0 - 1, src.1), src));
+    to_visit.push((Point(src.0, src.1 - 1), src));
+    let mut cur_dist = 0;
+    let mut found_dst: Option<Point> = None;
+
+    'outer: while !to_visit.is_empty() {
+      mem::swap(&mut visiting, &mut to_visit);
+      to_visit.clear();
+      cur_dist += 1;
+      while let Some((pt, from)) = visiting.pop() {
+        let cell = self.cell(pt); // proceed only if cell is vacant
+        if let Some(Cell::Vacant { previous, dist }) = cell {
+          if dist > cur_dist {
+            self.set(
+              pt,
+              Cell::Vacant {
+                previous: from,
+                dist: cur_dist,
+              },
+            );
+            if let Some(found_idx) = dsts.iter().position(|&p| p == pt) {
+              // |cur_dist| ascends so closest distance has been found; break
+              found_dst = Some(dsts[found_idx]);
+              break 'outer;
+            }
+            to_visit.push((Point(pt.0, pt.1 + 1), pt));
+            to_visit.push((Point(pt.0 + 1, pt.1), pt));
+            to_visit.push((Point(pt.0 - 1, pt.1), pt));
+            to_visit.push((Point(pt.0, pt.1 - 1), pt));
+          }
+        }
+      }
+    }
+
+    // if found a path, backtrack and choose the optimal next step
+    match found_dst {
+      Some(mut pt) => {
+        loop {
+          if let Some(Cell::Vacant { previous, .. }) = self.cell(pt) {
+            match self.is_vacant(previous) {
+              true => pt = previous,
+              false => break,
+            }
+          } else {
+            panic!("Unexpected state")
+          }
+        }
+        Some(pt)
+      }
+      None => None,
+    }
   }
 }
 
@@ -168,7 +262,10 @@ fn main() -> Result<(), Box<dyn Error>> {
               id,
             }
           }
-          _ => Cell::Vacant(std::u16::MAX),
+          _ => Cell::Vacant {
+            previous: Point::default(),
+            dist: Cell::MAX,
+          },
         }
       })
       .collect();
@@ -184,6 +281,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     height,
   };
   println!("{}", map);
+
+  let test_pt = Point(1, 1);
+  let targets = map.targets(test_pt);
+  println!("{:?}", targets);
+  if let Some(pt) = map.next_step(test_pt, &targets) {
+    println!("{:?}", pt);
+  }
 
   Ok(())
 }
