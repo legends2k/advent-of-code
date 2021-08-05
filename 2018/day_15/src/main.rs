@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{
   cmp::Ordering,
+  collections::HashMap,
   error::Error,
   fmt::Display,
   io::{stdin, BufRead},
@@ -25,6 +26,7 @@ impl PartialOrd for Point {
   }
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum FighterKind {
   Elf,
@@ -35,6 +37,7 @@ enum FighterKind {
 struct Fighter {
   kind: FighterKind,
   pos: Point,
+  hits: u8,
 }
 
 impl Ord for Fighter {
@@ -50,19 +53,37 @@ impl PartialOrd for Fighter {
 }
 
 impl Fighter {
-  fn target(&self, map: &Map) -> Option<Point> {
-    [
+  const ATTACK: u8 = 3;
+  const INITIAL_HITS: u8 = 200;
+
+  fn is_alive(&self) -> bool {
+    self.hits > 0
+  }
+
+  /** Returns next attacker ID if available */
+  fn target(&self, map: &Map) -> Option<u8> {
+    let mut enemies: Vec<u8> = [
       Point(self.pos.0, self.pos.1 - 1),
       Point(self.pos.0 - 1, self.pos.1),
       Point(self.pos.0 + 1, self.pos.1),
       Point(self.pos.0, self.pos.1 + 1),
     ]
     .iter()
-    .find(|&&pt| match map.cell(pt) {
-      Some(Cell::Occupied { kind, .. }) if kind != self.kind => true,
-      _ => false,
+    .filter(|&&pt| {
+      matches!(map.cell(pt),
+               Some(Cell::Occupied { kind, id })
+               if (kind != self.kind) && map.fighters[&id].is_alive() )
     })
-    .map(|&pt| pt)
+    .map(|&pt| match map.layout[map.point_to_idx(pt)] {
+      Cell::Occupied { id, .. } => id,
+      _ => unreachable!(),
+    })
+    .collect();
+    // Fighter’s PartialOrd sorts only by |pos|; we want by |hits| first
+    enemies.sort_unstable_by_key(|idx| {
+      (map.fighters[idx].hits, map.fighters[idx].pos)
+    });
+    enemies.first().copied()
   }
 }
 
@@ -70,7 +91,7 @@ impl Fighter {
 enum Cell {
   Wall,
   Vacant { previous: Point, dist: u16 },
-  Occupied { kind: FighterKind },
+  Occupied { kind: FighterKind, id: u8 },
 }
 
 impl Cell {
@@ -110,7 +131,7 @@ const MAP_DIMENSION_MAX: usize = 32;
 
 struct Map {
   layout: Vec<Cell>,
-  fighters: Vec<Fighter>,
+  fighters: HashMap<u8, Fighter>,
   width: usize,
   height: usize,
 }
@@ -128,10 +149,7 @@ impl Map {
   }
 
   fn is_vacant(&self, pt: Point) -> bool {
-    match self.cell(pt) {
-      Some(x) => x.is_vacant(),
-      None => false,
-    }
+    matches!(self.cell(pt), Some(cell) if cell.is_vacant())
   }
 
   fn targets(&self, from: Point) -> Vec<Point> {
@@ -150,8 +168,8 @@ impl Map {
     self
       .fighters
       .iter()
-      .filter(|&fighter| fighter.kind == enemy_kind)
-      .flat_map(|fighter| {
+      .filter(|&(_, fighter)| fighter.kind == enemy_kind && fighter.is_alive())
+      .flat_map(|(_, fighter)| {
         [
           Point(fighter.pos.0, fighter.pos.1 - 1),
           Point(fighter.pos.0 - 1, fighter.pos.1),
@@ -160,7 +178,7 @@ impl Map {
         ]
         .iter()
         .filter(|&&pt| self.is_vacant(pt))
-        .map(|&pt| pt)
+        .copied()
         .collect::<Vec<_>>()
       })
       .collect()
@@ -228,7 +246,6 @@ impl Map {
                   // same dist but preceding |pt| in reading order may be found.
                   almost_reached = true;
                   to_visit.clear();
-                  println!("None: Setting final dst: {:?}", pt);
                   Some(pt)
                 }
                 Some(old_dst) => match pt < old_dst {
@@ -257,7 +274,7 @@ impl Map {
               pt = previous
             }
             Some(Cell::Vacant { .. }) => break,
-            _ => panic!("Unexpected state"),
+            _ => unreachable!(),
           }
         }
         Some(pt)
@@ -266,17 +283,35 @@ impl Map {
     }
   }
 
-  fn move_fighter(&mut self, fighter_idx: usize, pt: Point) {
-    let old_idx = self.point_to_idx(self.fighters[fighter_idx].pos);
+  fn move_fighter(&mut self, idx: &u8, pt: Point) {
+    let old_idx = self.point_to_idx(self.fighters[idx].pos);
     self.layout[old_idx] = Cell::Vacant {
       previous: Point::default(),
       dist: Cell::MAX,
     };
-    self.fighters[fighter_idx].pos = pt;
+    // editing a value in a mutable hash map
+    // https://stackoverflow.com/a/30414450/183120
+    self.fighters.get_mut(idx).unwrap().pos = pt;
     let new_idx = self.point_to_idx(pt);
     self.layout[new_idx] = Cell::Occupied {
-      kind: self.fighters[fighter_idx].kind,
+      kind: self.fighters[idx].kind,
+      id: *idx,
     };
+  }
+
+  /** Attack |unit|.  Returns true if |unit| is dead after attack */
+  fn attack(&mut self, unit: u8) -> bool {
+    self.fighters.get_mut(&unit).unwrap().hits =
+      self.fighters[&unit].hits.saturating_sub(Fighter::ATTACK);
+    let attacked = &self.fighters[&unit];
+    if attacked.hits == 0 {
+      let idx = self.point_to_idx(attacked.pos);
+      self.layout[idx] = Cell::Vacant {
+        previous: Point::default(),
+        dist: Cell::MAX,
+      };
+    }
+    attacked.hits == 0
   }
 }
 
@@ -296,7 +331,7 @@ impl Display for Map {
 fn main() -> Result<(), Box<dyn Error>> {
   let mut layout =
     Vec::<Cell>::with_capacity(MAP_DIMENSION_MAX * MAP_DIMENSION_MAX);
-  let mut fighters = Vec::<Fighter>::with_capacity(32);
+  let mut fighters = HashMap::<u8, Fighter>::with_capacity(32);
 
   let mut height: usize = 0;
   for l in stdin().lock().lines() {
@@ -304,30 +339,43 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut digest: Vec<Cell> = line
       .bytes()
       .enumerate()
-      .map(|(idx, symbol)| match symbol {
-        b'#' => Cell::Wall,
-        b'E' => {
-          fighters.push(Fighter {
-            kind: FighterKind::Elf,
-            pos: Point(idx as u8, height as u8),
-          });
-          Cell::Occupied {
-            kind: FighterKind::Elf,
+      .map(|(idx, symbol)| {
+        let id = fighters.len() as u8;
+        match symbol {
+          b'#' => Cell::Wall,
+          b'E' => {
+            fighters.insert(
+              id,
+              Fighter {
+                kind: FighterKind::Elf,
+                pos: Point(idx as u8, height as u8),
+                hits: Fighter::INITIAL_HITS,
+              },
+            );
+            Cell::Occupied {
+              kind: FighterKind::Elf,
+              id,
+            }
           }
-        }
-        b'G' => {
-          fighters.push(Fighter {
-            kind: FighterKind::Goblin,
-            pos: Point(idx as u8, height as u8),
-          });
-          Cell::Occupied {
-            kind: FighterKind::Goblin,
+          b'G' => {
+            fighters.insert(
+              id,
+              Fighter {
+                kind: FighterKind::Goblin,
+                pos: Point(idx as u8, height as u8),
+                hits: Fighter::INITIAL_HITS,
+              },
+            );
+            Cell::Occupied {
+              kind: FighterKind::Goblin,
+              id,
+            }
           }
+          _ => Cell::Vacant {
+            previous: Point::default(),
+            dist: Cell::MAX,
+          },
         }
-        _ => Cell::Vacant {
-          previous: Point::default(),
-          dist: Cell::MAX,
-        },
       })
       .collect();
     layout.append(&mut digest);
@@ -342,21 +390,52 @@ fn main() -> Result<(), Box<dyn Error>> {
     height,
   };
 
-  for _ in 0..3 {
+  let mut fighter_ids = map.fighters.keys().copied().collect::<Vec<_>>();
+  let mut rounds = 0;
+  let mut victory = false;
+  'battle: while !victory {
     // fix turn order amongst fighters
-    map.fighters.sort();
-    for idx in 0..map.fighters.len() {
-      // attack or move?
-      if let Some(_) = map.fighters[idx].target(&map) {
-      } else {
-        let targets = map.targets(map.fighters[idx].pos);
-        if let Some(pt) = map.next_step(map.fighters[idx].pos, &targets) {
-          map.move_fighter(idx, pt);
-          println!("{}", map);
+    fighter_ids.sort_unstable_by_key(|idx| map.fighters[idx].pos);
+    for idx in &fighter_ids {
+      // let dead warriors rest in peace
+      if map.fighters[idx].hits != 0 {
+        // A turn is not just a move or an attack but it can be move + attack
+        // when the move positions fighter next (“adjacent”) to an enemy.
+        // Move
+        if map.fighters[idx].target(&map).is_none() {
+          let targets = map.targets(map.fighters[idx].pos);
+          if let Some(pt) = map.next_step(map.fighters[idx].pos, &targets) {
+            map.move_fighter(idx, pt);
+          } else if victory {
+            // don’t increment |rounds| if battle stops in the middle of a round
+            break 'battle;
+          }
+        }
+        // Attack
+        if let Some(enemy) = map.fighters[idx].target(&map) {
+          let enemy_kind = map.fighters[&enemy].kind;
+          // if enemy dead after attack and no more enemies left, end battle
+          if map.attack(enemy)
+            && !map
+              .fighters
+              .values()
+              .any(|f| f.kind == enemy_kind && f.is_alive())
+          {
+            victory = true;
+          }
         }
       }
     }
+    // println!("{}", map);
+    rounds += 1;
   }
+  let hits_left = map.fighters.values().map(|f| f.hits as u32).sum::<u32>();
+  println!(
+    "Outcome: {} (rounds) × {} (hit points): {}",
+    rounds,
+    hits_left,
+    rounds * hits_left
+  );
 
   Ok(())
 }
