@@ -201,6 +201,7 @@ impl Map {
     to_visit.push((Point(src.0, src.1 - 1), src));
     let mut cur_dist = 0;
     let mut final_dst: Option<Point> = None;
+    let mut almost_reached = false;
 
     while !to_visit.is_empty() {
       mem::swap(&mut visiting, &mut to_visit);
@@ -221,33 +222,27 @@ impl Map {
             if dsts.iter().any(|&p| p == pt) {
               final_dst = match final_dst {
                 None => {
+                  // Reached first target; stop futher outer loop iterations as
+                  // |cur_dist| only increases; we won’t find a closer target.
+                  // Process inner loop to completion since another target with
+                  // same dist but preceding |pt| in reading order may be found.
+                  almost_reached = true;
+                  to_visit.clear();
                   println!("None: Setting final dst: {:?}", pt);
                   Some(pt)
                 }
-                Some(old_dst) => match self.cell(old_dst) {
-                  // Destructuring structs and ignoring fields (not positional)
-                  // https://stackoverflow.com/a/38031302/183120
-                  Some(Cell::Vacant { dist, .. }) => {
-                    match (dist > cur_dist)
-                      || (dist == cur_dist && pt < old_dst)
-                    {
-                      true => {
-                        println!(
-                          "Some: Setting final dst: {:?}; old, new dist: {}, {}",
-                          pt, dist, cur_dist);
-                        Some(pt)
-                      }
-                      false => final_dst,
-                    }
-                  }
-                  _ => panic!("Invalid state"),
+                Some(old_dst) => match pt < old_dst {
+                  true => Some(pt),
+                  false => final_dst,
                 },
               };
             }
-            to_visit.push((Point(pt.0, pt.1 + 1), pt));
-            to_visit.push((Point(pt.0 + 1, pt.1), pt));
-            to_visit.push((Point(pt.0 - 1, pt.1), pt));
-            to_visit.push((Point(pt.0, pt.1 - 1), pt));
+            if !almost_reached {
+              to_visit.push((Point(pt.0, pt.1 + 1), pt));
+              to_visit.push((Point(pt.0 + 1, pt.1), pt));
+              to_visit.push((Point(pt.0 - 1, pt.1), pt));
+              to_visit.push((Point(pt.0, pt.1 - 1), pt));
+            }
           }
         }
       }
