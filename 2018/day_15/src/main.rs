@@ -6,6 +6,7 @@ use std::{
   fmt::Display,
   io::{stdin, BufRead},
   mem,
+  num::NonZeroU8,
 };
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -29,8 +30,34 @@ impl PartialOrd for Point {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum FighterKind {
-  Elf,
-  Goblin,
+  Elf(NonZeroU8),
+  Goblin(NonZeroU8),
+}
+
+impl FighterKind {
+  const INITIAL_ATTACK: u8 = 3;
+
+  fn new_elf(attack: u8) -> Self {
+    FighterKind::Elf(NonZeroU8::new(attack).unwrap())
+  }
+
+  fn new_goblin(attack: u8) -> Self {
+    FighterKind::Goblin(NonZeroU8::new(attack).unwrap())
+  }
+
+  fn attacks(&self) -> NonZeroU8 {
+    match self {
+      FighterKind::Elf(a) | FighterKind::Goblin(a) => *a,
+    }
+  }
+
+  fn is_same(&self, other: &Self) -> bool {
+    match (self, other) {
+      (FighterKind::Elf(_), FighterKind::Elf(_))
+      | (FighterKind::Goblin(_), FighterKind::Goblin(_)) => true,
+      _ => false,
+    }
+  }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -53,7 +80,6 @@ impl PartialOrd for Fighter {
 }
 
 impl Fighter {
-  const ATTACK: u8 = 3;
   const INITIAL_HITS: u8 = 200;
 
   fn is_alive(&self) -> bool {
@@ -110,11 +136,11 @@ impl fmt::Display for Cell {
       // https://stackoverflow.com/q/41390457/183120
       Cell::Vacant { .. } => b'.',
       Cell::Occupied {
-        kind: FighterKind::Elf,
+        kind: FighterKind::Elf(_),
         ..
       } => b'E',
       Cell::Occupied {
-        kind: FighterKind::Goblin,
+        kind: FighterKind::Goblin(_),
         ..
       } => b'G',
     };
@@ -156,19 +182,21 @@ impl Map {
     let cell = &self.layout[self.point_to_idx(from)];
     let enemy_kind = match cell {
       Cell::Occupied {
-        kind: FighterKind::Elf,
+        kind: FighterKind::Elf(_),
         ..
-      } => FighterKind::Goblin,
+      } => FighterKind::new_goblin(1),
       Cell::Occupied {
-        kind: FighterKind::Goblin,
+        kind: FighterKind::Goblin(_),
         ..
-      } => FighterKind::Elf,
+      } => FighterKind::new_elf(1),
       _ => panic!("Invalid source point!"),
     };
     self
       .fighters
       .iter()
-      .filter(|&(_, fighter)| fighter.kind == enemy_kind && fighter.is_alive())
+      .filter(|&(_, fighter)| {
+        fighter.kind.is_same(&enemy_kind) && fighter.is_alive()
+      })
       .flat_map(|(_, fighter)| {
         [
           Point(fighter.pos.0, fighter.pos.1 - 1),
@@ -300,9 +328,9 @@ impl Map {
   }
 
   /** Attack |unit|.  Returns true if |unit| is dead after attack */
-  fn attack(&mut self, unit: u8) -> bool {
+  fn attack(&mut self, unit: u8, attacks: NonZeroU8) -> bool {
     self.fighters.get_mut(&unit).unwrap().hits =
-      self.fighters[&unit].hits.saturating_sub(Fighter::ATTACK);
+      self.fighters[&unit].hits.saturating_sub(attacks.into());
     let attacked = &self.fighters[&unit];
     if attacked.hits == 0 {
       let idx = self.point_to_idx(attacked.pos);
@@ -328,70 +356,11 @@ impl Display for Map {
   }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-  let mut layout =
-    Vec::<Cell>::with_capacity(MAP_DIMENSION_MAX * MAP_DIMENSION_MAX);
-  let mut fighters = HashMap::<u8, Fighter>::with_capacity(32);
+struct RoundsAndHits(u32, u32);
 
-  let mut height: usize = 0;
-  for l in stdin().lock().lines() {
-    let line = l?;
-    let mut digest: Vec<Cell> = line
-      .bytes()
-      .enumerate()
-      .map(|(idx, symbol)| {
-        let id = fighters.len() as u8;
-        match symbol {
-          b'#' => Cell::Wall,
-          b'E' => {
-            fighters.insert(
-              id,
-              Fighter {
-                kind: FighterKind::Elf,
-                pos: Point(idx as u8, height as u8),
-                hits: Fighter::INITIAL_HITS,
-              },
-            );
-            Cell::Occupied {
-              kind: FighterKind::Elf,
-              id,
-            }
-          }
-          b'G' => {
-            fighters.insert(
-              id,
-              Fighter {
-                kind: FighterKind::Goblin,
-                pos: Point(idx as u8, height as u8),
-                hits: Fighter::INITIAL_HITS,
-              },
-            );
-            Cell::Occupied {
-              kind: FighterKind::Goblin,
-              id,
-            }
-          }
-          _ => Cell::Vacant {
-            previous: Point::default(),
-            dist: Cell::MAX,
-          },
-        }
-      })
-      .collect();
-    layout.append(&mut digest);
-    height += 1;
-  }
-  let width = layout.len() / height;
-
-  let mut map = Map {
-    layout,
-    fighters,
-    width,
-    height,
-  };
-
+fn battle(map: &mut Map) -> RoundsAndHits {
   let mut fighter_ids = map.fighters.keys().copied().collect::<Vec<_>>();
-  let mut rounds = 0;
+  let mut rounds = 0u32;
   let mut victory = false;
   'battle: while !victory {
     // fix turn order amongst fighters
@@ -415,7 +384,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(enemy) = map.fighters[idx].target(&map) {
           let enemy_kind = map.fighters[&enemy].kind;
           // if enemy dead after attack and no more enemies left, end battle
-          if map.attack(enemy)
+          if map.attack(enemy, map.fighters[idx].kind.attacks())
             && !map
               .fighters
               .values()
@@ -426,16 +395,83 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
       }
     }
-    // println!("{}", map);
     rounds += 1;
   }
   let hits_left = map.fighters.values().map(|f| f.hits as u32).sum::<u32>();
-  println!(
-    "Outcome: {} (rounds) × {} (hit points): {}",
-    rounds,
-    hits_left,
-    rounds * hits_left
-  );
+  RoundsAndHits(rounds, hits_left)
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+  let mut layout =
+    Vec::<Cell>::with_capacity(MAP_DIMENSION_MAX * MAP_DIMENSION_MAX);
+  let mut fighters = HashMap::<u8, Fighter>::with_capacity(32);
+
+  let mut height: usize = 0;
+  for l in stdin().lock().lines() {
+    let line = l?;
+    let mut digest: Vec<Cell> = line
+      .bytes()
+      .enumerate()
+      .map(|(idx, symbol)| {
+        let id = fighters.len() as u8;
+        match symbol {
+          b'#' => Cell::Wall,
+          b'E' => {
+            fighters.insert(
+              id,
+              Fighter {
+                kind: FighterKind::new_elf(FighterKind::INITIAL_ATTACK),
+                pos: Point(idx as u8, height as u8),
+                hits: Fighter::INITIAL_HITS,
+              },
+            );
+            Cell::Occupied {
+              kind: FighterKind::new_elf(FighterKind::INITIAL_ATTACK),
+              id,
+            }
+          }
+          b'G' => {
+            fighters.insert(
+              id,
+              Fighter {
+                kind: FighterKind::new_goblin(FighterKind::INITIAL_ATTACK),
+                pos: Point(idx as u8, height as u8),
+                hits: Fighter::INITIAL_HITS,
+              },
+            );
+            Cell::Occupied {
+              kind: FighterKind::new_goblin(FighterKind::INITIAL_ATTACK),
+              id,
+            }
+          }
+          _ => Cell::Vacant {
+            previous: Point::default(),
+            dist: Cell::MAX,
+          },
+        }
+      })
+      .collect();
+    layout.append(&mut digest);
+    height += 1;
+  }
+  let width = layout.len() / height;
+
+  // part 1
+  {
+    let mut map = Map {
+      layout,
+      fighters,
+      width,
+      height,
+    };
+    let RoundsAndHits(rounds, hits_left) = battle(&mut map);
+    println!(
+      "Outcome: {} (rounds) × {} (hit points): {}",
+      rounds,
+      hits_left,
+      rounds * hits_left
+    );
+  }
 
   Ok(())
 }
