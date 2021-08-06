@@ -45,25 +45,10 @@ impl FighterKind {
     FighterKind::Goblin(NonZeroU8::new(attack).unwrap())
   }
 
-  fn attacks(&self) -> NonZeroU8 {
+  fn attacks(&self) -> u8 {
     match self {
-      FighterKind::Elf(a) | FighterKind::Goblin(a) => *a,
+      FighterKind::Elf(attack) | FighterKind::Goblin(attack) => attack.get(),
     }
-  }
-
-  fn get_enemy(&self) -> Self {
-    match self {
-      FighterKind::Elf(_) => FighterKind::new_goblin(1),
-      FighterKind::Goblin(_) => FighterKind::new_elf(1),
-    }
-  }
-
-  fn is_same(&self, other: &Self) -> bool {
-    matches!(
-      (self, other),
-      (FighterKind::Elf(_), FighterKind::Elf(_))
-        | (FighterKind::Goblin(_), FighterKind::Goblin(_))
-    )
   }
 }
 
@@ -104,8 +89,7 @@ impl Fighter {
     .iter()
     .filter(|&&pt| {
       matches!(map.cell(pt),
-               Some(Cell::Occupied { kind, id })
-               if (map.fighters[&id].is_alive() && !kind.is_same(&self.kind)) )
+               Some(Cell::Occupied { kind, .. }) if kind != self.kind)
     })
     .map(|&pt| map.layout[map.point_to_idx(pt)].get_fighter_id())
     .collect();
@@ -139,9 +123,9 @@ impl Cell {
     }
   }
 
-  fn get_enemy(&self) -> FighterKind {
+  fn get_kind(&self) -> FighterKind {
     match self {
-      Cell::Occupied { kind, .. } => kind.get_enemy(),
+      Cell::Occupied { kind, .. } => *kind,
       _ => unreachable!(),
       // not going with panic! as never called on non-Occupied call
     }
@@ -200,12 +184,11 @@ impl Map {
 
   fn targets(&self, from: Point) -> Vec<Point> {
     let cell = &self.layout[self.point_to_idx(from)];
-    let enemy_kind = cell.get_enemy();
     self
       .fighters
       .iter()
       .filter(|&(_, fighter)| {
-        fighter.kind.is_same(&enemy_kind) && fighter.is_alive()
+        fighter.is_alive() && fighter.kind != cell.get_kind()
       })
       .flat_map(|(_, fighter)| {
         [
@@ -307,11 +290,11 @@ impl Map {
     match final_dst {
       Some(mut pt) => {
         loop {
-          match self.cell(pt) {
-            Some(Cell::Vacant { previous, .. }) if self.is_vacant(previous) => {
-              pt = previous
-            }
-            Some(Cell::Vacant { .. }) => break,
+          match self.layout[self.point_to_idx(pt)] {
+            Cell::Vacant { previous, .. } => match self.is_vacant(previous) {
+              true => pt = previous,
+              false => break,
+            },
             _ => unreachable!(),
           }
         }
@@ -337,10 +320,10 @@ impl Map {
     };
   }
 
-  /** Attack |unit|.  Returns true if |unit| is dead after attack */
-  fn attack(&mut self, unit: u8, attacks: NonZeroU8) -> bool {
+  /** Attack `unit`.  Return true if `unit` is dead after attack */
+  fn attack(&mut self, unit: u8, attacks: u8) -> bool {
     self.fighters.get_mut(&unit).unwrap().hits =
-      self.fighters[&unit].hits.saturating_sub(attacks.into());
+      self.fighters[&unit].hits.saturating_sub(attacks);
     let attacked = &self.fighters[&unit];
     if attacked.hits == 0 {
       let idx = self.point_to_idx(attacked.pos);
@@ -422,7 +405,7 @@ fn battle(map: &mut Map, no_elf_dies: bool) -> Option<RoundsAndHits> {
             victory = !map
               .fighters
               .values()
-              .any(|f| f.kind == enemy_kind && f.is_alive())
+              .any(|f| f.is_alive() && f.kind == enemy_kind);
           }
         }
       }
