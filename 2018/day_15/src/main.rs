@@ -51,16 +51,23 @@ impl FighterKind {
     }
   }
 
-  fn is_same(&self, other: &Self) -> bool {
-    match (self, other) {
-      (FighterKind::Elf(_), FighterKind::Elf(_))
-      | (FighterKind::Goblin(_), FighterKind::Goblin(_)) => true,
-      _ => false,
+  fn get_enemy(&self) -> Self {
+    match self {
+      FighterKind::Elf(_) => FighterKind::new_goblin(1),
+      FighterKind::Goblin(_) => FighterKind::new_elf(1),
     }
+  }
+
+  fn is_same(&self, other: &Self) -> bool {
+    matches!(
+      (self, other),
+      (FighterKind::Elf(_), FighterKind::Elf(_))
+        | (FighterKind::Goblin(_), FighterKind::Goblin(_))
+    )
   }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Fighter {
   kind: FighterKind,
   pos: Point,
@@ -98,12 +105,9 @@ impl Fighter {
     .filter(|&&pt| {
       matches!(map.cell(pt),
                Some(Cell::Occupied { kind, id })
-               if (kind != self.kind) && map.fighters[&id].is_alive() )
+               if (map.fighters[&id].is_alive() && !kind.is_same(&self.kind)) )
     })
-    .map(|&pt| match map.layout[map.point_to_idx(pt)] {
-      Cell::Occupied { id, .. } => id,
-      _ => unreachable!(),
-    })
+    .map(|&pt| map.layout[map.point_to_idx(pt)].get_fighter_id())
     .collect();
     // Fighter’s PartialOrd sorts only by |pos|; we want by |hits| first
     enemies.sort_unstable_by_key(|idx| {
@@ -125,6 +129,22 @@ impl Cell {
 
   fn is_vacant(&self) -> bool {
     matches!(self, Cell::Vacant { .. })
+  }
+
+  fn get_fighter_id(&self) -> u8 {
+    match self {
+      Cell::Occupied { id, .. } => *id,
+      _ => unreachable!(),
+      // not going with panic! as never called on non-Occupied call
+    }
+  }
+
+  fn get_enemy(&self) -> FighterKind {
+    match self {
+      Cell::Occupied { kind, .. } => kind.get_enemy(),
+      _ => unreachable!(),
+      // not going with panic! as never called on non-Occupied call
+    }
   }
 }
 
@@ -180,17 +200,7 @@ impl Map {
 
   fn targets(&self, from: Point) -> Vec<Point> {
     let cell = &self.layout[self.point_to_idx(from)];
-    let enemy_kind = match cell {
-      Cell::Occupied {
-        kind: FighterKind::Elf(_),
-        ..
-      } => FighterKind::new_goblin(1),
-      Cell::Occupied {
-        kind: FighterKind::Goblin(_),
-        ..
-      } => FighterKind::new_elf(1),
-      _ => panic!("Invalid source point!"),
-    };
+    let enemy_kind = cell.get_enemy();
     self
       .fighters
       .iter()
@@ -341,6 +351,27 @@ impl Map {
     }
     attacked.hits == 0
   }
+
+  /** Set new attack points for Elves */
+  fn set_elves_attack(&mut self, new_attack: u8) {
+    // can’t mutate self.layout while mutating self.fighters; note and do later
+    // https://stackoverflow.com/a/45724688/183120
+    let mut to_update = Vec::new();
+    for fighter in self.fighters.values_mut() {
+      if matches!(fighter.kind, FighterKind::Elf(_)) {
+        fighter.kind = FighterKind::new_elf(new_attack);
+        to_update.push(fighter.pos);
+      }
+    }
+    for pt in to_update {
+      let idx = self.point_to_idx(pt);
+      let elf_id = self.layout[idx].get_fighter_id();
+      self.layout[idx] = Cell::Occupied {
+        kind: FighterKind::new_elf(new_attack),
+        id: elf_id,
+      };
+    }
+  }
 }
 
 impl Display for Map {
@@ -358,7 +389,7 @@ impl Display for Map {
 
 struct RoundsAndHits(u32, u32);
 
-fn battle(map: &mut Map) -> RoundsAndHits {
+fn battle(map: &mut Map, no_elf_dies: bool) -> Option<RoundsAndHits> {
   let mut fighter_ids = map.fighters.keys().copied().collect::<Vec<_>>();
   let mut rounds = 0u32;
   let mut victory = false;
@@ -373,24 +404,25 @@ fn battle(map: &mut Map) -> RoundsAndHits {
         // Move
         if map.fighters[idx].target(&map).is_none() {
           let targets = map.targets(map.fighters[idx].pos);
-          if let Some(pt) = map.next_step(map.fighters[idx].pos, &targets) {
-            map.move_fighter(idx, pt);
-          } else if victory {
-            // don’t increment |rounds| if battle stops in the middle of a round
-            break 'battle;
+          match (map.next_step(map.fighters[idx].pos, &targets), victory) {
+            (Some(pt), _) => map.move_fighter(idx, pt),
+            // battle ceased in the middle of a round, don’t increment |rounds|
+            (None, true) => break 'battle,
+            (None, false) => (), // skip turn and lay in wait
           }
         }
         // Attack
         if let Some(enemy) = map.fighters[idx].target(&map) {
-          let enemy_kind = map.fighters[&enemy].kind;
-          // if enemy dead after attack and no more enemies left, end battle
-          if map.attack(enemy, map.fighters[idx].kind.attacks())
-            && !map
+          if map.attack(enemy, map.fighters[idx].kind.attacks()) {
+            // enemy dead after attack; mark victory if no enemies are left
+            let enemy_kind = map.fighters[&enemy].kind;
+            if no_elf_dies && matches!(enemy_kind, FighterKind::Elf(_)) {
+              return None;
+            }
+            victory = !map
               .fighters
               .values()
               .any(|f| f.kind == enemy_kind && f.is_alive())
-          {
-            victory = true;
           }
         }
       }
@@ -398,7 +430,7 @@ fn battle(map: &mut Map) -> RoundsAndHits {
     rounds += 1;
   }
   let hits_left = map.fighters.values().map(|f| f.hits as u32).sum::<u32>();
-  RoundsAndHits(rounds, hits_left)
+  Some(RoundsAndHits(rounds, hits_left))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -459,18 +491,44 @@ fn main() -> Result<(), Box<dyn Error>> {
   // part 1
   {
     let mut map = Map {
-      layout,
-      fighters,
+      layout: layout.clone(),
+      fighters: fighters.clone(),
       width,
       height,
     };
-    let RoundsAndHits(rounds, hits_left) = battle(&mut map);
+    let RoundsAndHits(rounds, hits_left) =
+      battle(&mut map, /*no_elf_dies*/ false).unwrap();
     println!(
       "Outcome: {} (rounds) × {} (hit points): {}",
       rounds,
       hits_left,
       rounds * hits_left
     );
+  }
+
+  // part 2
+  let mut elf_attack = 4u8;
+  loop {
+    let mut map = Map {
+      layout: layout.clone(),
+      fighters: fighters.clone(),
+      width,
+      height,
+    };
+    map.set_elves_attack(elf_attack);
+    if let Some(RoundsAndHits(rounds, hits_left)) =
+      battle(&mut map, /*no_elf_dies*/ true)
+    {
+      println!(
+        "Outcome: {} (rounds) × {} (hit points): {}",
+        rounds,
+        hits_left,
+        rounds * hits_left
+      );
+      println!("With {} attacks no elves die!", elf_attack);
+      break;
+    }
+    elf_attack += 1;
   }
 
   Ok(())
