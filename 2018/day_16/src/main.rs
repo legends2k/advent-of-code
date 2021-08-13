@@ -1,22 +1,23 @@
 use std::{
+  collections::{HashMap, HashSet},
   error::Error,
   io::{self, BufRead},
 };
 
-struct Cpu<'a, 'b> {
+struct Cpu<'a> {
   reg: [u8; 4],
   // operations jump table
-  ops: [Jump<'a, 'b>; 16],
+  ops: [Jump<'a>; 16],
 }
 
 #[derive(Clone, Copy)]
-struct Jump<'a, 'b> {
+struct Jump<'a> {
   opcode: i8,
   name: &'a str,
-  fnptr: fn(&mut Cpu<'a, 'b>, u8, u8, u8),
+  fnptr: fn(&mut Cpu<'a>, u8, u8, u8),
 }
 
-impl Cpu<'_, '_> {
+impl Cpu<'_> {
   fn new() -> Self {
     Cpu {
       reg: [0, 0, 0, 0],
@@ -178,16 +179,24 @@ struct Sample {
   post: [u8; 4],
 }
 
-fn possible_opcodes(mut cpu: &mut Cpu, s: Sample) -> usize {
+fn possible_opcodes<'a>(
+  mut cpu: &mut Cpu<'a>,
+  map: &mut HashMap<&'a str, HashSet<u8>>,
+  sample: Sample,
+) -> usize {
   let ops = cpu.ops.clone();
   ops
     .iter()
     .filter(|&op| {
-      cpu.reg = s.pre;
-      (op.fnptr)(&mut cpu, s.instr[1], s.instr[2], s.instr[3]);
-      cpu.reg == s.post
+      cpu.reg = sample.pre;
+      (op.fnptr)(&mut cpu, sample.instr[1], sample.instr[2], sample.instr[3]);
+      cpu.reg == sample.post
     })
-    .count()
+    .fold(0usize, |acc, op| {
+      let s = map.entry(op.name).or_insert(HashSet::new());
+      s.insert(sample.instr[0]);
+      acc + 1
+    })
 }
 
 /** Reads a string of delimiter-seperated list of 4 values into `reg`
@@ -235,9 +244,10 @@ fn main() -> Result<(), Box<dyn Error>> {
   }
 
   let mut cpu = Cpu::new();
+  let mut map = HashMap::<&str, HashSet<u8>>::with_capacity(16);
   let count_exceeding_3 = samples
     .iter()
-    .filter(|&&sample| possible_opcodes(&mut cpu, sample) > 2)
+    .filter(|&&sample| possible_opcodes(&mut cpu, &mut map, sample) > 2)
     .count();
   println!("Samples similar to 3+ opcodes: {}", count_exceeding_3);
 
