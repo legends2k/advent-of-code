@@ -74,45 +74,27 @@ impl Cpu {
   }
 
   fn gtir(&mut self, a: u8, b: u8, c: u8) {
-    self.reg[c as usize] = match a > self.reg[b as usize] {
-      true => 1,
-      false => 0,
-    };
+    self.reg[c as usize] = (a > self.reg[b as usize]) as u8;
   }
 
   fn gtri(&mut self, a: u8, b: u8, c: u8) {
-    self.reg[c as usize] = match self.reg[a as usize] > b {
-      true => 1,
-      false => 0,
-    };
+    self.reg[c as usize] = (self.reg[a as usize] > b) as u8;
   }
 
   fn gtrr(&mut self, a: u8, b: u8, c: u8) {
-    self.reg[c as usize] = match self.reg[a as usize] > self.reg[b as usize] {
-      true => 1,
-      false => 0,
-    };
+    self.reg[c as usize] = (self.reg[a as usize] > self.reg[b as usize]) as u8;
   }
 
   fn eqir(&mut self, a: u8, b: u8, c: u8) {
-    self.reg[c as usize] = match a == self.reg[b as usize] {
-      true => 1,
-      false => 0,
-    };
+    self.reg[c as usize] = (a == self.reg[b as usize]) as u8;
   }
 
   fn eqri(&mut self, a: u8, b: u8, c: u8) {
-    self.reg[c as usize] = match self.reg[a as usize] == b {
-      true => 1,
-      false => 0,
-    };
+    self.reg[c as usize] = (self.reg[a as usize] == b) as u8;
   }
 
   fn eqrr(&mut self, a: u8, b: u8, c: u8) {
-    self.reg[c as usize] = match self.reg[a as usize] == self.reg[b as usize] {
-      true => 1,
-      false => 0,
-    };
+    self.reg[c as usize] = (self.reg[a as usize] == self.reg[b as usize]) as u8;
   }
 }
 
