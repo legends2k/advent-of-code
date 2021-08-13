@@ -1,33 +1,106 @@
-use std::error::Error;
-use std::io::{self, BufRead};
+use std::{
+  error::Error,
+  io::{self, BufRead},
+};
 
-struct Cpu {
+struct Cpu<'a, 'b> {
   reg: [u8; 4],
-  // operations
-  ops: [(String, fn(&mut Cpu, u8, u8, u8)); 16],
+  // operations jump table
+  ops: [Jump<'a, 'b>; 16],
 }
 
-impl Cpu {
+#[derive(Clone, Copy)]
+struct Jump<'a, 'b> {
+  opcode: i8,
+  name: &'a str,
+  fnptr: fn(&mut Cpu<'a, 'b>, u8, u8, u8),
+}
+
+impl Cpu<'_, '_> {
   fn new() -> Self {
     Cpu {
       reg: [0, 0, 0, 0],
       ops: [
-        ("addr".to_string(), Self::addr),
-        ("addi".to_string(), Self::addi),
-        ("mulr".to_string(), Self::mulr),
-        ("muli".to_string(), Self::muli),
-        ("banr".to_string(), Self::banr),
-        ("bani".to_string(), Self::bani),
-        ("borr".to_string(), Self::borr),
-        ("bori".to_string(), Self::bori),
-        ("setr".to_string(), Self::setr),
-        ("seti".to_string(), Self::seti),
-        ("gtir".to_string(), Self::gtir),
-        ("gtri".to_string(), Self::gtri),
-        ("gtrr".to_string(), Self::gtrr),
-        ("eqir".to_string(), Self::eqir),
-        ("eqri".to_string(), Self::eqri),
-        ("eqrr".to_string(), Self::eqrr),
+        Jump {
+          opcode: -1,
+          name: &"addr",
+          fnptr: Self::addr,
+        },
+        Jump {
+          opcode: -1,
+          name: &"addi",
+          fnptr: Self::addi,
+        },
+        Jump {
+          opcode: -1,
+          name: &"mulr",
+          fnptr: Self::mulr,
+        },
+        Jump {
+          opcode: -1,
+          name: &"muli",
+          fnptr: Self::muli,
+        },
+        Jump {
+          opcode: -1,
+          name: &"banr",
+          fnptr: Self::banr,
+        },
+        Jump {
+          opcode: -1,
+          name: &"bani",
+          fnptr: Self::bani,
+        },
+        Jump {
+          opcode: -1,
+          name: &"borr",
+          fnptr: Self::borr,
+        },
+        Jump {
+          opcode: -1,
+          name: &"bori",
+          fnptr: Self::bori,
+        },
+        Jump {
+          opcode: -1,
+          name: &"setr",
+          fnptr: Self::setr,
+        },
+        Jump {
+          opcode: -1,
+          name: &"seti",
+          fnptr: Self::seti,
+        },
+        Jump {
+          opcode: -1,
+          name: &"gtir",
+          fnptr: Self::gtir,
+        },
+        Jump {
+          opcode: -1,
+          name: &"gtri",
+          fnptr: Self::gtri,
+        },
+        Jump {
+          opcode: -1,
+          name: &"gtrr",
+          fnptr: Self::gtrr,
+        },
+        Jump {
+          opcode: -1,
+          name: &"eqir",
+          fnptr: Self::eqir,
+        },
+        Jump {
+          opcode: -1,
+          name: &"eqri",
+          fnptr: Self::eqri,
+        },
+        Jump {
+          opcode: -1,
+          name: &"eqrr",
+          fnptr: Self::eqrr,
+        },
       ],
     }
   }
@@ -109,9 +182,9 @@ fn possible_opcodes(mut cpu: &mut Cpu, s: Sample) -> usize {
   let ops = cpu.ops.clone();
   ops
     .iter()
-    .filter(|(_, op)| {
+    .filter(|&op| {
       cpu.reg = s.pre;
-      op(&mut cpu, s.instr[1], s.instr[2], s.instr[3]);
+      (op.fnptr)(&mut cpu, s.instr[1], s.instr[2], s.instr[3]);
       cpu.reg == s.post
     })
     .count()
@@ -125,9 +198,7 @@ fn load_values(list: &str, delim: &str, reg: &mut [u8; 4]) {
     .split(delim)
     .filter_map(|s| s.parse::<u8>().ok())
     .collect::<Vec<u8>>();
-  for i in 0..4 {
-    reg[i] = tokens[i];
-  }
+  reg[..4].clone_from_slice(&tokens[..4]);
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -164,7 +235,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   }
 
   let mut cpu = Cpu::new();
-  let mut count_exceeding_3 = samples
+  let count_exceeding_3 = samples
     .iter()
     .filter(|&&sample| possible_opcodes(&mut cpu, sample) > 2)
     .count();
