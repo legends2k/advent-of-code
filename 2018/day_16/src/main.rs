@@ -16,18 +16,18 @@ impl Cpu {
         ("addi".to_string(), Self::addi),
         ("mulr".to_string(), Self::mulr),
         ("muli".to_string(), Self::muli),
-        ("banr".to_string(), Self::muli),
-        ("bani".to_string(), Self::muli),
-        ("borr".to_string(), Self::muli),
-        ("bori".to_string(), Self::muli),
-        ("setr".to_string(), Self::muli),
-        ("seti".to_string(), Self::muli),
-        ("gtir".to_string(), Self::muli),
-        ("gtri".to_string(), Self::muli),
-        ("gtrr".to_string(), Self::muli),
-        ("eqir".to_string(), Self::muli),
-        ("eqri".to_string(), Self::muli),
-        ("eqrr".to_string(), Self::muli),
+        ("banr".to_string(), Self::banr),
+        ("bani".to_string(), Self::bani),
+        ("borr".to_string(), Self::borr),
+        ("bori".to_string(), Self::bori),
+        ("setr".to_string(), Self::setr),
+        ("seti".to_string(), Self::seti),
+        ("gtir".to_string(), Self::gtir),
+        ("gtri".to_string(), Self::gtri),
+        ("gtrr".to_string(), Self::gtrr),
+        ("eqir".to_string(), Self::eqir),
+        ("eqri".to_string(), Self::eqri),
+        ("eqrr".to_string(), Self::eqrr),
       ],
     }
   }
@@ -70,7 +70,7 @@ impl Cpu {
   }
 
   fn seti(&mut self, a: u8, _: u8, c: u8) {
-    self.reg[c as usize] = self.reg[a as usize];
+    self.reg[c as usize] = a;
   }
 
   fn gtir(&mut self, a: u8, b: u8, c: u8) {
@@ -181,6 +181,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
   }
 
-  let mut c = Cpu::new();
+  let mut cpu = Cpu::new();
+  let mut count_exceeding_3 = samples
+    .iter()
+    .filter(|&&sample| possible_opcodes(&mut cpu, sample) > 2)
+    .count();
+  println!("Samples similar to 3+ opcodes: {}", count_exceeding_3);
+
   Ok(())
 }
