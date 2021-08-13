@@ -1,3 +1,6 @@
+use std::error::Error;
+use std::io::{self, BufRead};
+
 struct Cpu {
   reg: [u8; 4],
   // operations
@@ -113,13 +116,14 @@ impl Cpu {
   }
 }
 
+#[derive(Default, Debug, Copy, Clone)]
 struct Sample {
   pre: [u8; 4],
   instr: [u8; 4],
   post: [u8; 4],
 }
 
-fn possible_ops(mut cpu: &mut Cpu, s: Sample) -> usize {
+fn possible_opcodes(mut cpu: &mut Cpu, s: Sample) -> usize {
   let ops = cpu.ops.clone();
   ops
     .iter()
@@ -131,6 +135,52 @@ fn possible_ops(mut cpu: &mut Cpu, s: Sample) -> usize {
     .count()
 }
 
-fn main() {
+/** Reads a string of delimiter-seperated list of 4 values into `reg`
+   e.g. `"14, 0, 2, 1"`
+*/
+fn load_values(list: &str, delim: &str, reg: &mut [u8; 4]) {
+  let tokens = list
+    .split(delim)
+    .filter_map(|s| s.parse::<u8>().ok())
+    .collect::<Vec<u8>>();
+  for i in 0..4 {
+    reg[i] = tokens[i];
+  }
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+  // parse input
+  let mut samples = Vec::<Sample>::with_capacity(900);
+  let mut sample_program = Vec::<[u8; 4]>::with_capacity(900);
+  let mut current_sample: Option<Sample> = None;
+  for l in io::stdin().lock().lines() {
+    let line = l?;
+    if !line.is_empty() {
+      match (current_sample, line.bytes().next()) {
+        (Some(mut sample), Some(b'A')) => {
+          load_values(&line[9..19], ", ", &mut sample.post);
+          samples.push(sample);
+          current_sample = None;
+        }
+        (Some(mut sample), _) => {
+          load_values(&line, " ", &mut sample.instr);
+          current_sample = Some(sample);
+        }
+        (None, Some(b'B')) => {
+          let mut sample = Sample::default();
+          load_values(&line[9..19], ", ", &mut sample.pre);
+          current_sample = Some(sample);
+        }
+        (None, _) => {
+          // part 2 input
+          let mut values = [0u8; 4];
+          load_values(&line, " ", &mut values);
+          sample_program.push(values);
+        }
+      }
+    }
+  }
+
   let mut c = Cpu::new();
+  Ok(())
 }
