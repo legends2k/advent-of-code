@@ -1,5 +1,4 @@
 use std::{
-  collections::{HashMap, HashSet},
   error::Error,
   io::{self, BufRead},
 };
@@ -181,20 +180,20 @@ struct Sample {
 
 fn possible_opcodes<'a>(
   mut cpu: &mut Cpu<'a>,
-  map: &mut HashMap<&'a str, HashSet<u8>>,
+  map: &mut [u16; 16],
   sample: Sample,
 ) -> usize {
-  let ops = cpu.ops.clone();
+  let ops = cpu.ops;
   ops
     .iter()
-    .filter(|&op| {
+    .enumerate()
+    .filter(|(_, &op)| {
       cpu.reg = sample.pre;
       (op.fnptr)(&mut cpu, sample.instr[1], sample.instr[2], sample.instr[3]);
       cpu.reg == sample.post
     })
-    .fold(0usize, |acc, op| {
-      let s = map.entry(op.name).or_insert(HashSet::new());
-      s.insert(sample.instr[0]);
+    .fold(0usize, |acc, (idx, _)| {
+      map[sample.instr[0] as usize] |= 1u16 << idx;
       acc + 1
     })
 }
@@ -244,12 +243,14 @@ fn main() -> Result<(), Box<dyn Error>> {
   }
 
   let mut cpu = Cpu::new();
-  let mut map = HashMap::<&str, HashSet<u8>>::with_capacity(16);
+  let mut map = [0u16; 16];
   let count_exceeding_3 = samples
     .iter()
     .filter(|&&sample| possible_opcodes(&mut cpu, &mut map, sample) > 2)
     .count();
   println!("Samples similar to 3+ opcodes: {}", count_exceeding_3);
+
+  println!("{:?}", map[10].count_ones());
 
   Ok(())
 }
