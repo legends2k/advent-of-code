@@ -1,5 +1,6 @@
 use std::{
   error::Error,
+  fmt::{self, Debug, Formatter},
   io::{self, BufRead},
 };
 
@@ -171,6 +172,22 @@ impl Cpu<'_> {
   }
 }
 
+#[cfg(debug_assertions)]
+macro_rules! debug_print {
+    ($( $args:expr ),*) => { println!( $( $args ),* ); }
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! debug_print {
+  ($( $args:expr ),*) => {};
+}
+
+impl Debug for Jump<'_> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    write!(f, "{} --> {}", self.opcode, self.name)
+  }
+}
+
 #[derive(Default, Debug, Copy, Clone)]
 struct Sample {
   pre: [u8; 4],
@@ -260,6 +277,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   {
     let fnptr_idx = opcode_to_fnptr[idx].trailing_zeros();
     cpu.ops[fnptr_idx as usize].opcode = idx as i8;
+    debug_print!("{:?}", cpu.ops[fnptr_idx as usize]);
     let mask = !opcode_to_fnptr[idx];
     opcode_to_fnptr
       .iter_mut()
@@ -267,6 +285,9 @@ fn main() -> Result<(), Box<dyn Error>> {
   }
   if cpu.ops.iter().any(|j| j.opcode == -1) {
     eprintln!("FAILURE: unable to resolve all opcodes from given samples");
+  } else {
+    // sort |Cpu::ops| to align array index to opcode
+    cpu.ops.sort_unstable_by(|a, b| a.opcode.cmp(&b.opcode));
   }
 
   Ok(())
