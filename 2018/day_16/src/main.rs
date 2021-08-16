@@ -242,15 +242,32 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
   }
 
+  // part 1
   let mut cpu = Cpu::new();
-  let mut map = [0u16; 16];
+  let mut opcode_to_fnptr = [0u16; 16];
   let count_exceeding_3 = samples
     .iter()
-    .filter(|&&sample| possible_opcodes(&mut cpu, &mut map, sample) > 2)
+    .filter(|&&sample| {
+      possible_opcodes(&mut cpu, &mut opcode_to_fnptr, sample) > 2
+    })
     .count();
   println!("Samples similar to 3+ opcodes: {}", count_exceeding_3);
 
-  println!("{:?}", map[10].count_ones());
+  // part 2.1: resolve opcodes and mnemonics
+  while let Some(idx) = opcode_to_fnptr
+    .iter()
+    .position(|fnptrs| fnptrs.count_ones() == 1)
+  {
+    let fnptr_idx = opcode_to_fnptr[idx].trailing_zeros();
+    cpu.ops[fnptr_idx as usize].opcode = idx as i8;
+    let mask = !opcode_to_fnptr[idx];
+    opcode_to_fnptr
+      .iter_mut()
+      .for_each(|fnptrs| *fnptrs &= mask);
+  }
+  if cpu.ops.iter().any(|j| j.opcode == -1) {
+    eprintln!("FAILURE: unable to resolve all opcodes from given samples");
+  }
 
   Ok(())
 }
