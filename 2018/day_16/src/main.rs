@@ -233,7 +233,7 @@ fn load_values(list: &str, delim: &str, reg: &mut [u16; 4]) {
     .split(delim)
     .filter_map(|s| s.parse::<u16>().ok())
     .collect::<Vec<u16>>();
-  reg[..4].clone_from_slice(&tokens[..4]);
+  reg.copy_from_slice(&tokens);
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
