@@ -2,7 +2,8 @@ use core::str::FromStr;
 use std::{
   error::Error,
   fmt::{self, Debug, Formatter},
-  io::{self, BufRead},
+  fs::File,
+  io::{self, BufRead, Write},
   ops::{Add, AddAssign, Rem, Sub},
   thread::sleep,
   time::Duration,
@@ -280,11 +281,13 @@ impl Stream {
 fn main() -> Result<(), Box<dyn Error>> {
   // Find X interval; expand by 1 to accommodate overflow beyond farthest pot.
   // Find Y-max; grow by 1 avoiding out of bounds checks. Y-min is always 1.
-  let (mut min, mut max) = (Point(i32::MAX, 1), Point(i32::MIN, i32::MIN));
+  let (mut min, mut max) =
+    (Point(i32::MAX, i32::MAX), Point(i32::MIN, i32::MIN));
   let mut lines = Vec::<Line>::with_capacity(1700);
   for l in io::stdin().lock().lines() {
     let l = Line::from_str(&l?)?;
     min.0 = min.0.min(l.end[0].0.min(l.end[1].0));
+    min.1 = min.1.min(l.end[0].1.min(l.end[1].1));
     max.0 = max.0.max(l.end[0].0.max(l.end[1].0));
     max.1 = max.1.max(l.end[0].1.max(l.end[1].1));
     lines.push(l);
@@ -331,6 +334,15 @@ fn main() -> Result<(), Box<dyn Error>> {
       .filter(|&&c| c == b'|' || c == b'~')
       .count()
   );
+
+  let mut o = File::create("output")?;
+  for j in 0..ground.rows {
+    for i in 0..ground.cols {
+      let idx = (j * ground.cols + i) as usize;
+      write!(o, "{}", ground.data[idx] as char)?;
+    }
+    writeln!(o)?;
+  }
 
   Ok(())
 }
