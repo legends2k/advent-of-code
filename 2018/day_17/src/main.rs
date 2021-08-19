@@ -106,8 +106,8 @@ impl FromStr for Line {
 }
 
 struct Ground {
-  cols: usize,
-  rows: usize,
+  cols: i32,
+  rows: i32,
   data: Vec<u8>,
 }
 
@@ -124,14 +124,14 @@ impl Debug for Ground {
       }
       writeln!(f)?;
     }
-    sleep(Duration::from_secs_f32(0.75));
+    sleep(Duration::from_secs_f32(0.25));
     Ok(())
   }
 }
 
 impl Ground {
   fn to_idx(&self, pt: Point) -> usize {
-    pt.1 as usize * self.cols + pt.0 as usize
+    (pt.1 * self.cols + pt.0) as usize
   }
 
   fn set(&mut self, ch: u8, l: Line) {
@@ -144,7 +144,7 @@ impl Ground {
         let offset = self.to_idx(l.end[0]);
         self.data[offset..]
           .iter_mut()
-          .step_by(self.cols)
+          .step_by(self.cols as usize)
           .take((l.end[1].1 - l.end[0].1 + 1) as usize)
           .for_each(|c| *c = ch);
       }
@@ -214,6 +214,13 @@ impl Stream {
     g.set_point(p, b'!');
   }
 
+  fn is_alive(&self) -> bool {
+    match self.state {
+      State::Wall => false,
+      _ => true,
+    }
+  }
+
   fn flow(&mut self, g: &mut Ground) -> Vec<Self> {
     let mut new_streams = Vec::with_capacity(2);
     let below = self.pos % 1;
@@ -221,14 +228,18 @@ impl Stream {
       State::Wall => (),
       State::Down => {
         g.set_point(self.pos, b'|');
-        match g.get_point(below) {
-          // TODO: add ‘|’ and ‘!’?
-          b'.' => self.set_position(below, g),
-          b'#' | b'~' => {
-            self.state = State::Wall;
-            g.spring_streams(self.pos, &mut new_streams);
+        if below.1 < g.rows {
+          match g.get_point(below) {
+            // TODO: add ‘|’ and ‘!’?
+            b'.' => self.set_position(below, g),
+            b'#' | b'~' => {
+              self.state = State::Wall;
+              g.spring_streams(self.pos, &mut new_streams);
+            }
+            _ => unreachable!(),
           }
-          _ => unreachable!(),
+        } else {
+          self.state = State::Wall;
         }
       }
       State::Left(origin) | State::Right(origin) => {
@@ -282,13 +293,13 @@ fn main() -> Result<(), Box<dyn Error>> {
   max.0 += 1;
 
   println!("Min: {:?}, Max: {:?}", min, max);
-  let rows = (max.1 - min.1 + 1) as usize;
-  let cols = (max.0 - min.0 + 1) as usize;
+  let rows = max.1 - min.1 + 1;
+  let cols = max.0 - min.0 + 1;
   println!("Ground size: {} × {}\n", cols, rows);
   let mut ground = Ground {
     cols,
     rows,
-    data: vec![b'.'; rows * cols],
+    data: vec![b'.'; (rows * cols) as usize],
   };
 
   // plot the scan
@@ -304,16 +315,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     state: State::Down,
     pos: eternal_spring,
   });
-  println!("{:?}", ground);
 
   let mut new_streams = Vec::with_capacity(4);
-  for _ in 0..45 {
+  while streams.iter().any(|s| s.is_alive()) {
     for s in streams.iter_mut() {
       new_streams.append(&mut s.flow(&mut ground));
     }
-    println!("{:?}", ground);
     streams.append(&mut new_streams);
   }
+  println!(
+    "Count of water tiles: {}",
+    ground
+      .data
+      .iter()
+      .filter(|&&c| c == b'|' || c == b'~')
+      .count()
+  );
 
   Ok(())
 }
