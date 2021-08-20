@@ -162,7 +162,8 @@ impl Ground {
     self.data[idx]
   }
 
-  fn spring_streams(&mut self, origin: Point, streams: &mut Vec<Stream>) {
+  fn spring_streams(&mut self, origin: Point, streams: &mut Vec<Stream>) -> u8 {
+    let mut added = 0;
     let sides = [origin - 1, origin + 1];
     let states = [State::Left(origin), State::Right(origin)];
     for (i, &s) in sides.iter().enumerate() {
@@ -172,8 +173,10 @@ impl Ground {
           state: states[i],
           pos: s,
         });
+        added += 1;
       }
     }
+    added
   }
 
   /**
@@ -235,7 +238,12 @@ impl Stream {
             b'.' => self.set_position(below, g),
             b'#' | b'~' => {
               self.state = State::Wall;
-              g.spring_streams(self.pos, &mut new_streams);
+              // loop to handle single block pots
+              let mut origin = self.pos;
+              while g.spring_streams(origin, &mut new_streams) == 0 {
+                g.set_point(origin, b'~');
+                origin = origin % -1;
+              }
             }
             _ => unreachable!(),
           }
@@ -243,7 +251,7 @@ impl Stream {
           self.state = State::Wall;
         }
       }
-      State::Left(origin) | State::Right(origin) => {
+      State::Left(mut origin) | State::Right(mut origin) => {
         g.set_point(self.pos, b'|');
         match g.get_point(below) {
           b'.' => {
@@ -264,11 +272,18 @@ impl Stream {
                   let mut water = Line::new_dx(self.pos.1, self.pos.0, wall.0);
                   water.normalize();
                   g.set(b'~', water);
-                  g.spring_streams(origin % -1, &mut new_streams);
+                  // loop to handle single block pots
+                  while g.spring_streams(origin % -1, &mut new_streams) == 0 {
+                    origin = origin % -1;
+                    g.set_point(origin, b'~');
+                  }
                 }
                 self.state = State::Wall;
               }
-              _ => unreachable!(),
+              _ => {
+                log_to_file(&g);
+                panic!("Oops: saw a \"{}\"", g.get_point(side) as char);
+              }
             }
           }
         }
@@ -276,6 +291,18 @@ impl Stream {
     }
     new_streams
   }
+}
+
+fn log_to_file(ground: &Ground) -> Result<(), Box<dyn Error>> {
+  let mut o = File::create("output")?;
+  for j in 0..ground.rows {
+    for i in 0..ground.cols {
+      let idx = (j * ground.cols + i) as usize;
+      write!(o, "{}", ground.data[idx] as char)?;
+    }
+    writeln!(o)?;
+  }
+  Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -335,14 +362,7 @@ fn main() -> Result<(), Box<dyn Error>> {
       .count()
   );
 
-  let mut o = File::create("output")?;
-  for j in 0..ground.rows {
-    for i in 0..ground.cols {
-      let idx = (j * ground.cols + i) as usize;
-      write!(o, "{}", ground.data[idx] as char)?;
-    }
-    writeln!(o)?;
-  }
+  log_to_file(&ground)?;
 
   Ok(())
 }
