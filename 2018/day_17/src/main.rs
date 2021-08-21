@@ -191,9 +191,9 @@ enum State {
 
 struct Stream {
   state: State,
+  to_fill: u16,
   pos: Point,
-  origin: Point,
-  parent: isize,
+  parent: i32,
 }
 
 impl Stream {
@@ -209,11 +209,15 @@ impl Stream {
       State::Down => {
         let bottom = g.find_ground(self.pos % 1);
         g.set(b'|', Line::new_dy(self.pos.0, self.pos.1, bottom.1));
+        let distance = bottom.1 - self.pos.1;
         self.pos = bottom;
         self.state = match (bottom.1 + 1) < g.rows {
           true => match g.get_point(self.pos % 1) {
             b'|' => State::Gone,
-            _ => State::Fill,
+            _ => {
+              self.to_fill = distance as u16;
+              State::Fill
+            }
           },
           false => State::Gone, // reached end of input
         };
@@ -224,9 +228,10 @@ impl Stream {
         match (wall_l, wall_r) {
           (true, true) => {
             g.set(b'~', Line::new_dx(self.pos.1, left.0, right.0));
+            self.to_fill -= 1;
             self.pos = self.pos % -1;
             // done with stream; unblock parent stream
-            if self.pos == self.origin {
+            if self.to_fill == 0 {
               self.state = State::Done;
             }
           }
@@ -235,8 +240,8 @@ impl Stream {
             new_streams.push(Stream {
               state: State::Down,
               pos: right,
-              origin: right,
-              parent: idx as isize,
+              to_fill: 0,
+              parent: idx as i32,
             });
             self.state = State::Wait(1);
           }
@@ -245,8 +250,8 @@ impl Stream {
             new_streams.push(Stream {
               state: State::Down,
               pos: left,
-              origin: left,
-              parent: idx as isize,
+              to_fill: 0,
+              parent: idx as i32,
             });
             self.state = State::Wait(1);
           }
@@ -256,14 +261,14 @@ impl Stream {
             new_streams.push(Stream {
               state: State::Down,
               pos: left,
-              origin: left,
-              parent: idx as isize,
+              to_fill: 0,
+              parent: idx as i32,
             });
             new_streams.push(Stream {
               state: State::Down,
               pos: right,
-              origin: right,
-              parent: idx as isize,
+              to_fill: 0,
+              parent: idx as i32,
             });
             self.state = State::Wait(2);
           }
@@ -322,7 +327,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   streams.push(Stream {
     state: State::Down,
     pos: eternal_spring,
-    origin: eternal_spring,
+    to_fill: 0,
     parent: -1,
   });
   ground.set_point(eternal_spring, b'|');
