@@ -197,6 +197,15 @@ struct Stream {
 }
 
 impl Stream {
+  fn new(pos: Point, parent: i32) -> Self {
+    Stream {
+      state: State::Down,
+      pos,
+      to_fill: 0,
+      parent,
+    }
+  }
+
   fn is_alive(&self) -> bool {
     match self.state {
       State::Down | State::Fill => true,
@@ -228,8 +237,8 @@ impl Stream {
         match (wall_l, wall_r) {
           (true, true) => {
             g.set(b'~', Line::new_dx(self.pos.1, left.0, right.0));
-            self.to_fill -= 1;
             self.pos = self.pos % -1;
+            self.to_fill -= 1;
             // done with stream; unblock parent stream
             if self.to_fill == 0 {
               self.state = State::Done;
@@ -237,39 +246,19 @@ impl Stream {
           }
           (true, false) => {
             g.set(b'|', Line::new_dx(self.pos.1, left.0, right.0));
-            new_streams.push(Stream {
-              state: State::Down,
-              pos: right,
-              to_fill: 0,
-              parent: idx as i32,
-            });
+            new_streams.push(Stream::new(right, idx as i32));
             self.state = State::Wait(1);
           }
           (false, true) => {
             g.set(b'|', Line::new_dx(self.pos.1, left.0, right.0));
-            new_streams.push(Stream {
-              state: State::Down,
-              pos: left,
-              to_fill: 0,
-              parent: idx as i32,
-            });
+            new_streams.push(Stream::new(left, idx as i32));
             self.state = State::Wait(1);
           }
           (false, false) => {
             // both arms beget children
             g.set(b'|', Line::new_dx(self.pos.1, left.0, right.0));
-            new_streams.push(Stream {
-              state: State::Down,
-              pos: left,
-              to_fill: 0,
-              parent: idx as i32,
-            });
-            new_streams.push(Stream {
-              state: State::Down,
-              pos: right,
-              to_fill: 0,
-              parent: idx as i32,
-            });
+            new_streams.push(Stream::new(left, idx as i32));
+            new_streams.push(Stream::new(right, idx as i32));
             self.state = State::Wait(2);
           }
         }
@@ -324,12 +313,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   // set first stream
   let eternal_spring = Point(500 - min.0, 0);
   let mut streams = Vec::with_capacity(2_00_000);
-  streams.push(Stream {
-    state: State::Down,
-    pos: eternal_spring,
-    to_fill: 0,
-    parent: -1,
-  });
+  streams.push(Stream::new(eternal_spring, -1));
   ground.set_point(eternal_spring, b'|');
 
   let mut new_streams = Vec::with_capacity(32);
