@@ -9,7 +9,7 @@ use std::{
   time::Duration,
 };
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 struct Point(i32, i32);
 
 impl Add<i32> for Point {
@@ -74,18 +74,6 @@ impl Line {
 
   fn is_horizontal(&self) -> bool {
     self.end[0].1 == self.end[1].1
-  }
-
-  /** Sort end points to have reading order */
-  fn normalize(&mut self) {
-    match (
-      self.is_horizontal(),
-      (self.end[0].0 > self.end[1].0),
-      (self.end[0].1 > self.end[1].1),
-    ) {
-      (true, true, _) | (false, _, true) => self.end.swap(0, 1),
-      _ => (),
-    };
   }
 }
 
@@ -162,21 +150,14 @@ impl Ground {
     self.data[idx]
   }
 
-  fn spring_streams(&mut self, origin: Point, streams: &mut Vec<Stream>) -> u8 {
-    let mut added = 0;
-    let sides = [origin - 1, origin + 1];
-    let states = [State::Left(origin), State::Right(origin)];
-    for (i, &s) in sides.iter().enumerate() {
-      if self.get_point(s) == b'.' {
-        self.set_point(s, b'!');
-        streams.push(Stream {
-          state: states[i],
-          pos: s,
-        });
-        added += 1;
-      }
+  fn find_ground(&self, mut p: Point) -> Point {
+    let c = self.get_point(p);
+    // keep skipping until we reach a different block like ‘#’, ‘~’
+    // or ‘|’ in case we reach another stream’s ebb out
+    while p.1 < self.rows && self.get_point(p) == c {
+      p = p % 1;
     }
-    added
+    p % -1
   }
 
   /**
@@ -184,110 +165,112 @@ impl Ground {
     and blocking underlying blocks (wall or water; ‘#’ or ‘~’). `dir` should be
     `-1` for searching left.
   */
-  fn opposite_wall(&self, mut p: Point, dir: i32) -> Option<Point> {
+  fn opposite_wall(&self, mut p: Point, dir: i32) -> (Point, bool) {
     let mut below = p % 1;
-    while (self.get_point(p) == b'|')
+    while (self.get_point(p) != b'#')  // skip ‘.’ and ‘|’
       && ((self.get_point(below) == b'#') || (self.get_point(below) == b'~'))
     {
       p += dir;
       below = p % 1;
     }
     match (self.get_point(p), self.get_point(below)) {
-      (b'#', b'#') | (b'#', b'~') => Some(p - dir),
-      _ => None,
+      (b'#', b'#') | (b'#', b'~') => ((p - dir), true),
+      _ => (p, false),
     }
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum State {
-  Down,         // flowing down
-  Wall,         // resting; offsprings at work
-  Left(Point),  // at exit check if bound by ‘#’ both sides and fill
-  Right(Point), // --- do ---
+  Down,
+  Fill,
+  Wait(u8), // state while children are at work; may/may not resume
+  Done,
+  Gone,
 }
 
 struct Stream {
   state: State,
   pos: Point,
+  origin: Point,
+  parent: isize,
 }
 
 impl Stream {
-  fn set_position(&mut self, p: Point, g: &mut Ground) {
-    self.pos = p;
-    g.set_point(p, b'!');
-  }
-
   fn is_alive(&self) -> bool {
     match self.state {
-      State::Wall => false,
-      _ => true,
+      State::Down | State::Fill => true,
+      State::Done | State::Wait(_) | State::Gone => false,
     }
   }
 
-  fn flow(&mut self, g: &mut Ground) -> Vec<Self> {
-    let mut new_streams = Vec::with_capacity(2);
-    let below = self.pos % 1;
+  fn flow(&mut self, idx: usize, g: &mut Ground) -> Vec<Self> {
+    let mut new_streams = Vec::with_capacity(4);
     match self.state {
-      State::Wall => (),
       State::Down => {
-        g.set_point(self.pos, b'|');
-        if below.1 < g.rows {
-          match g.get_point(below) {
-            // TODO: add ‘|’ and ‘!’?
-            b'.' => self.set_position(below, g),
-            b'#' | b'~' => {
-              self.state = State::Wall;
-              // loop to handle single block pots
-              let mut origin = self.pos;
-              while g.spring_streams(origin, &mut new_streams) == 0 {
-                g.set_point(origin, b'~');
-                origin = origin % -1;
-              }
-            }
-            _ => unreachable!(),
-          }
-        } else {
-          self.state = State::Wall;
-        }
+        let bottom = g.find_ground(self.pos % 1);
+        g.set(b'|', Line::new_dy(self.pos.0, self.pos.1, bottom.1));
+        self.pos = bottom;
+        self.state = match (bottom.1 + 1) < g.rows {
+          true => match g.get_point(self.pos % 1) {
+            b'|' => State::Gone,
+            _ => State::Fill,
+          },
+          false => State::Gone, // reached end of input
+        };
       }
-      State::Left(mut origin) | State::Right(mut origin) => {
-        g.set_point(self.pos, b'|');
-        match g.get_point(below) {
-          b'.' => {
-            self.set_position(below, g);
-            self.state = State::Down;
-          }
-          _ => {
-            let (side, opp_dir) = match self.state {
-              State::Left(_) => (self.pos - 1, 1),
-              State::Right(_) => (self.pos + 1, -1),
-              _ => unreachable!(),
-            };
-            match g.get_point(side) {
-              b'.' => self.set_position(side, g),
-              b'#' => {
-                // stop and/or fill + create offspring
-                if let Some(wall) = g.opposite_wall(self.pos, opp_dir) {
-                  let mut water = Line::new_dx(self.pos.1, self.pos.0, wall.0);
-                  water.normalize();
-                  g.set(b'~', water);
-                  // loop to handle single block pots
-                  while g.spring_streams(origin % -1, &mut new_streams) == 0 {
-                    origin = origin % -1;
-                    g.set_point(origin, b'~');
-                  }
-                }
-                self.state = State::Wall;
-              }
-              _ => {
-                log_to_file(&g);
-                panic!("Oops: saw a \"{}\"", g.get_point(side) as char);
-              }
+      State::Fill => {
+        let (left, wall_l) = g.opposite_wall(self.pos, -1);
+        let (right, wall_r) = g.opposite_wall(self.pos, 1);
+        match (wall_l, wall_r) {
+          (true, true) => {
+            g.set(b'~', Line::new_dx(self.pos.1, left.0, right.0));
+            self.pos = self.pos % -1;
+            // done with stream; unblock parent stream
+            if self.pos == self.origin {
+              self.state = State::Done;
             }
           }
+          (true, false) => {
+            g.set(b'|', Line::new_dx(self.pos.1, left.0, right.0));
+            new_streams.push(Stream {
+              state: State::Down,
+              pos: right,
+              origin: right,
+              parent: idx as isize,
+            });
+            self.state = State::Wait(1);
+          }
+          (false, true) => {
+            g.set(b'|', Line::new_dx(self.pos.1, left.0, right.0));
+            new_streams.push(Stream {
+              state: State::Down,
+              pos: left,
+              origin: left,
+              parent: idx as isize,
+            });
+            self.state = State::Wait(1);
+          }
+          (false, false) => {
+            // both arms beget children
+            g.set(b'|', Line::new_dx(self.pos.1, left.0, right.0));
+            new_streams.push(Stream {
+              state: State::Down,
+              pos: left,
+              origin: left,
+              parent: idx as isize,
+            });
+            new_streams.push(Stream {
+              state: State::Down,
+              pos: right,
+              origin: right,
+              parent: idx as isize,
+            });
+            self.state = State::Wait(2);
+          }
         }
       }
+      _ => (),
     }
     new_streams
   }
@@ -322,10 +305,8 @@ fn main() -> Result<(), Box<dyn Error>> {
   min.0 -= 1;
   max.0 += 1;
 
-  println!("Min: {:?}, Max: {:?}", min, max);
   let rows = max.1 - min.1 + 1;
   let cols = max.0 - min.0 + 1;
-  println!("Ground size: {} × {}\n", cols, rows);
   let mut ground = Ground {
     cols,
     rows,
@@ -339,30 +320,48 @@ fn main() -> Result<(), Box<dyn Error>> {
   }
   // set first stream
   let eternal_spring = Point(500 - min.0, 0);
-  ground.set_point(eternal_spring, b'!');
-  let mut streams = Vec::with_capacity(10);
+  let mut streams = Vec::with_capacity(200_000);
   streams.push(Stream {
     state: State::Down,
     pos: eternal_spring,
+    origin: eternal_spring,
+    parent: -1,
   });
+  ground.set_point(eternal_spring, b'|');
 
-  let mut new_streams = Vec::with_capacity(4);
+  let mut new_streams = Vec::with_capacity(1024);
   while streams.iter().any(|s| s.is_alive()) {
-    for s in streams.iter_mut() {
-      new_streams.append(&mut s.flow(&mut ground));
+    let n = streams.len();
+    for idx in 0..n {
+      if streams[idx].state != State::Done {
+        new_streams.append(&mut streams[idx].flow(idx, &mut ground));
+        if streams[idx].state == State::Done && streams[idx].parent >= 0 {
+          let parent_id = streams[idx].parent as usize;
+          streams[parent_id].state = match streams[parent_id].state {
+            State::Wait(child) if child == 1 => State::Fill,
+            State::Wait(child) => State::Wait(child - 1),
+            _ => streams[parent_id].state,
+          };
+        }
+      }
     }
     streams.append(&mut new_streams);
   }
+
   println!(
-    "Count of water tiles: {}",
+    "Count of moist tiles: {}",
     ground
       .data
       .iter()
       .filter(|&&c| c == b'|' || c == b'~')
       .count()
   );
+  println!(
+    "Count of water tiles: {}",
+    ground.data.iter().filter(|&&c| c == b'~').count()
+  );
 
-  log_to_file(&ground)?;
+  // log_to_file(&ground)?;
 
   Ok(())
 }
