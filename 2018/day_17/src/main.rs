@@ -163,7 +163,7 @@ impl Ground {
   /**
     Given one wall of a pot, find other.  Requires wet (‘|’) intervening blocks
     and blocking underlying blocks (wall or water; ‘#’ or ‘~’). `dir` should be
-    `-1` for searching left.
+    `-1` for searching left.  Returns (_, false) if it’s not a barrier plane.
   */
   fn opposite_wall(&self, mut p: Point, dir: i32) -> (Point, bool) {
     let mut below = p % 1;
@@ -204,8 +204,7 @@ impl Stream {
     }
   }
 
-  fn flow(&mut self, idx: usize, g: &mut Ground) -> Vec<Self> {
-    let mut new_streams = Vec::with_capacity(4);
+  fn flow(&mut self, idx: usize, g: &mut Ground, new_streams: &mut Vec<Self>) {
     match self.state {
       State::Down => {
         let bottom = g.find_ground(self.pos % 1);
@@ -272,7 +271,6 @@ impl Stream {
       }
       _ => (),
     }
-    new_streams
   }
 }
 
@@ -320,7 +318,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   }
   // set first stream
   let eternal_spring = Point(500 - min.0, 0);
-  let mut streams = Vec::with_capacity(200_000);
+  let mut streams = Vec::with_capacity(2_00_000);
   streams.push(Stream {
     state: State::Down,
     pos: eternal_spring,
@@ -329,12 +327,12 @@ fn main() -> Result<(), Box<dyn Error>> {
   });
   ground.set_point(eternal_spring, b'|');
 
-  let mut new_streams = Vec::with_capacity(1024);
+  let mut new_streams = Vec::with_capacity(32);
   while streams.iter().any(|s| s.is_alive()) {
     let n = streams.len();
     for idx in 0..n {
       if streams[idx].state != State::Done {
-        new_streams.append(&mut streams[idx].flow(idx, &mut ground));
+        streams[idx].flow(idx, &mut ground, &mut new_streams);
         if streams[idx].state == State::Done && streams[idx].parent >= 0 {
           let parent_id = streams[idx].parent as usize;
           streams[parent_id].state = match streams[parent_id].state {
