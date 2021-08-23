@@ -1,10 +1,10 @@
 use std::{
   fmt::{self, Debug, Formatter},
   io::{self, BufRead, Error},
-  iter, mem,
+  mem,
 };
 
-/** Map with 2 extra rows and cols surrounding. */
+/** Map with 2 extra rows and cols surrounding; implementation detail. */
 #[derive(Clone)]
 struct Map {
   data: Vec<u8>,
@@ -13,6 +13,21 @@ struct Map {
 }
 
 impl Map {
+  fn new(size: usize) -> Self {
+    Map {
+      data: vec![0; (size + 2) * (size + 2)],
+      cols: size as u16,
+      rows: size as u16,
+    }
+  }
+
+  /** Set `data` from `values`; assumes input of length: `cols` and indices
+   *  starting from 0, ignoring the dummy boundary rows and cols */
+  fn set(&mut self, row: usize, values: &[u8]) {
+    let start = self.to_idx(row as u16 + 1, 1);
+    self.data[start..(start + self.cols as usize)].copy_from_slice(values);
+  }
+
   fn to_idx(&self, row: u16, col: u16) -> usize {
     (row * (self.cols + 2) + col) as usize
   }
@@ -100,41 +115,37 @@ impl Debug for Map {
   }
 }
 
+/** Runs `iterations` of simulation but try short-circuiting every
+`short` times */
+fn simulate(m: &Map, iterations: u64) -> u32 {
+  let (mut m1, mut m2) = (m.clone(), m.clone());
+  for _ in 0..iterations {
+    mem::swap(&mut m1.data, &mut m2.data);
+    m1.flip(&mut m2);
+  }
+  // println!("{:?}", m2);
+  m2.value()
+}
+
 fn main() -> Result<(), Error> {
   let mut line = String::new();
   let size = match io::stdin().read_line(&mut line) {
     Ok(n) => n - 1, // sub ‘\n’
     Err(_) => panic!("Invalid input"),
   };
-  let mut m1 = Map {
-    data: Vec::<u8>::with_capacity((size + 2) * (size + 2)),
-    rows: size as u16,
-    cols: size as u16,
-  };
-  m1.data.extend(iter::repeat(0).take(size + 2));
-  m1.data.push(0);
-  m1.data.extend_from_slice(line[0..size].as_bytes());
-  m1.data.push(0);
-
+  let mut m = Map::new(size);
+  let mut row = 0;
+  m.set(row, line[0..size].as_bytes());
   for l in io::stdin().lock().lines() {
     let line = l?;
-    m1.data.push(0);
-    m1.data.extend_from_slice(line[0..size].as_bytes());
-    m1.data.push(0);
+    row += 1;
+    m.set(row, line[0..size].as_bytes());
   }
-  m1.data.extend(iter::repeat(0).take(size + 2));
-
-  let mut m2 = m1.clone();
-  for _ in 0..10 {
-    mem::swap(&mut m1.data, &mut m2.data);
-    m1.flip(&mut m2);
-  }
-  // println!("{:?}", m2);
 
   // Part 1
   println!(
     "Total resource value of lumber after 10 mins: {}",
-    m2.value()
+    simulate(&m, 10)
   );
 
   Ok(())
