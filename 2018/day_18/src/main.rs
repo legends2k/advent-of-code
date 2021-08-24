@@ -56,10 +56,9 @@ impl Map {
     // |24  25  26| 27 ...
     let (mut trees, mut lumberyard) = (0, 0);
     adj_idxs.iter().for_each(|&i| match self.data[i] {
-      b'.' | 0 => (),
       b'|' => trees += 1,
       b'#' => lumberyard += 1,
-      _ => unreachable!(),
+      _ => (),
     });
     f(trees, lumberyard)
   }
@@ -115,13 +114,57 @@ impl Debug for Map {
   }
 }
 
-/** Runs `iterations` of simulation but try short-circuiting every
+/** Checks if `values` has a repeating sequence at the end;
+returns its length if found */
+fn has_repeating_sequence(values: &[u32]) -> Option<usize> {
+  let value = match values.last() {
+    Some(&x) => x,
+    None => return None,
+  };
+  if let Some(f) = values.iter().rev().skip(2).position(|&v| v == value) {
+    // Current value was generated earlier; check if there’s a
+    // repeating sequence placed back to back
+    let border = values.len() - 2 - f;
+    let expected_len = values.len() - border;
+    // check if it’s repeating ignoring small sequences
+    if (expected_len > 2)
+      && (border >= expected_len)
+      && (values[(border - expected_len)..border] == values[border..])
+    {
+      return Some(expected_len);
+    }
+  }
+  None
+}
+
+/** Runs `iterations` of simulation but try short-circuiting after
 `short` times */
-fn simulate(m: &Map, iterations: u64) -> u32 {
+fn simulate(m: &Map, iterations: u32, short: u16) -> u32 {
   let (mut m1, mut m2) = (m.clone(), m.clone());
-  for _ in 0..iterations {
+
+  let mut values = Vec::with_capacity(1024);
+  for i in 0..iterations {
     mem::swap(&mut m1.data, &mut m2.data);
     m1.flip(&mut m2);
+
+    if i >= short.into() {
+      let this_value = m2.value();
+      values.push(this_value);
+      if let Some(seq_len) = has_repeating_sequence(&values) {
+        // println!("Found {}-value repeating sequence at {}", seq_len, i);
+        // values
+        //   .iter()
+        //   .rev()
+        //   .take(seq_len)
+        //   .rev()
+        //   .for_each(|&x| print!("{}, ", x));
+        let pending = (iterations - 1 - i) as usize;
+        // `- 1` because `pending` is count while we want index
+        let idx_into_seq = (pending - 1) % seq_len;
+        let base = values.len() - seq_len;
+        return values[base + idx_into_seq];
+      }
+    }
   }
   // println!("{:?}", m2);
   m2.value()
@@ -145,7 +188,13 @@ fn main() -> Result<(), Error> {
   // Part 1
   println!(
     "Total resource value of lumber after 10 mins: {}",
-    simulate(&m, 10)
+    simulate(&m, 10, 10)
+  );
+
+  // Part 2
+  println!(
+    "Total resource value of lumber after 1,000,000,000 mins: {}",
+    simulate(&m, 1_000_000_000, 500)
   );
 
   Ok(())
