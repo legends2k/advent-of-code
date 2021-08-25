@@ -302,6 +302,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     cpu.ops.sort_unstable_by(|a, b| a.opcode.cmp(&b.opcode));
   }
 
+  // Uncomment to print mnemonics and opcodes for Day 19
+  // cpu
+  //   .ops
+  //   .iter()
+  //   .for_each(|op| println!("{}: {}", op.name, op.opcode));
+
   // part 2.2: run program
   cpu.clear();
   program.iter().for_each(|stmt| cpu.execute(stmt));

@@ -13,11 +13,11 @@
 # Solution Steps
 
 * Part I: path finding
-  - [ ] Given empty map, src cell and bunch of dst cells
+  - [x] Given empty map, src cell and bunch of dst cells
     + Board can be an array of enums: wall, vacant, goblin(id), elf(id)
     + List of players
       * Sort top-left to bottom-right
       * Deduce in-range cells that are adj to target
       * Do BFS and keep broadening range; stop when an in-range cell is found
-  - [ ] Find in-range points; vacant, adjacent cells of targets
+  - [x] Find in-range points; vacant, adjacent cells of targets
 * Part II: attack
