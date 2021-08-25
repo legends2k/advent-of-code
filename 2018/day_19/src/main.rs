@@ -4,17 +4,26 @@ use std::{
   io::{self, BufRead},
 };
 
+type Word = u32;
+type InputWord = u8;
+type Instruction = [InputWord; 4];
+
 struct Cpu<'a> {
-  reg: [u16; 6],
-  ip: u8,
-  op: [fn(&mut Cpu<'a>, u16, u16, u16); 16],
+  reg: [Word; Cpu::REG_COUNT as usize],
+  ip: u8, // < REG_COUNT
+  op:
+    [fn(&mut Cpu<'a>, InputWord, InputWord, InputWord); Cpu::OP_COUNT as usize],
 }
 
 impl Cpu<'_> {
-  fn new(ip: u8) -> Self {
+  const REG_COUNT: u8 = 6;
+  const OP_COUNT: u8 = 16;
+
+  /** Create a CPU with IP bound to a register; `ip_reg` is unchecked */
+  fn new(ip_reg: u8) -> Self {
     Cpu {
-      reg: [0; 6],
-      ip,
+      reg: [0; Self::REG_COUNT as usize],
+      ip: ip_reg,
       op: [
         Self::borr,
         Self::addr,
@@ -36,78 +45,98 @@ impl Cpu<'_> {
     }
   }
 
+  fn run(&mut self, program: &[Instruction]) {
+    self.set_ip(0);
+    while self.get_ip() < program.len() {
+      let i = program[self.get_ip()];
+      (self.op[i[0] as usize])(self, i[1], i[2], i[3]);
+      self.inc_ip();
+    }
+  }
+
+  fn inc_ip(&mut self) {
+    self.reg[self.ip as usize] += 1;
+  }
+
+  fn set_ip(&mut self, value: Word) {
+    self.reg[self.ip as usize] = value;
+  }
+
+  fn get_ip(&mut self) -> usize {
+    self.reg[self.ip as usize] as usize
+  }
+
   // operations
-  fn addr(&mut self, a: u16, b: u16, c: u16) {
+  fn addr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
     self.reg[c as usize] = self.reg[a as usize] + self.reg[b as usize];
   }
 
-  fn addi(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = self.reg[a as usize] + b;
+  fn addi(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = self.reg[a as usize] + b as Word;
   }
 
-  fn mulr(&mut self, a: u16, b: u16, c: u16) {
+  fn mulr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
     self.reg[c as usize] = self.reg[a as usize] * self.reg[b as usize];
   }
 
-  fn muli(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = self.reg[a as usize] * b;
+  fn muli(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = self.reg[a as usize] * b as Word;
   }
 
-  fn banr(&mut self, a: u16, b: u16, c: u16) {
+  fn banr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
     self.reg[c as usize] = self.reg[a as usize] & self.reg[b as usize];
   }
 
-  fn bani(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = self.reg[a as usize] & b;
+  fn bani(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = self.reg[a as usize] & b as Word;
   }
 
-  fn borr(&mut self, a: u16, b: u16, c: u16) {
+  fn borr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
     self.reg[c as usize] = self.reg[a as usize] | self.reg[b as usize];
   }
 
-  fn bori(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = self.reg[a as usize] | b;
+  fn bori(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = self.reg[a as usize] | b as Word;
   }
 
-  fn setr(&mut self, a: u16, _: u16, c: u16) {
+  fn setr(&mut self, a: InputWord, _: InputWord, c: InputWord) {
     self.reg[c as usize] = self.reg[a as usize];
   }
 
-  fn seti(&mut self, a: u16, _: u16, c: u16) {
-    self.reg[c as usize] = a;
+  fn seti(&mut self, a: InputWord, _: InputWord, c: InputWord) {
+    self.reg[c as usize] = a as Word;
   }
 
-  fn gtir(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = (a > self.reg[b as usize]) as u16;
+  fn gtir(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = (a as Word > self.reg[b as usize]) as Word;
   }
 
-  fn gtri(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = (self.reg[a as usize] > b) as u16;
+  fn gtri(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = (self.reg[a as usize] > b as Word) as Word;
   }
 
-  fn gtrr(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = (self.reg[a as usize] > self.reg[b as usize]) as u16;
-  }
-
-  fn eqir(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = (a == self.reg[b as usize]) as u16;
-  }
-
-  fn eqri(&mut self, a: u16, b: u16, c: u16) {
-    self.reg[c as usize] = (self.reg[a as usize] == b) as u16;
-  }
-
-  fn eqrr(&mut self, a: u16, b: u16, c: u16) {
+  fn gtrr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
     self.reg[c as usize] =
-      (self.reg[a as usize] == self.reg[b as usize]) as u16;
+      (self.reg[a as usize] > self.reg[b as usize]) as Word;
+  }
+
+  fn eqir(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = (a as Word == self.reg[b as usize]) as Word;
+  }
+
+  fn eqri(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] = (self.reg[a as usize] == b as Word) as Word;
+  }
+
+  fn eqrr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    self.reg[c as usize] =
+      (self.reg[a as usize] == self.reg[b as usize]) as Word;
   }
 }
 
-type Instruction = [u16; 4];
-
 fn parse_program() -> Result<Vec<Instruction>, Box<dyn Error>> {
-  let mut mnemonics_to_opcodes = HashMap::<&str, u16>::with_capacity(16);
-  mnemonics_to_opcodes.insert("borr", 0);
+  let mut mnemonics_to_opcodes = HashMap::with_capacity(16);
+  mnemonics_to_opcodes.insert("borr", 0u8);
   mnemonics_to_opcodes.insert("addr", 1);
   mnemonics_to_opcodes.insert("eqrr", 2);
   mnemonics_to_opcodes.insert("addi", 3);
@@ -143,7 +172,7 @@ fn parse_program() -> Result<Vec<Instruction>, Box<dyn Error>> {
     // following can’t be done in a functional fashion since iter::map’s closure
     // can’t do returning of a Result from this function
     for (idx, &t) in tokens[1..4].iter().enumerate() {
-      let value = match t.parse::<u16>() {
+      let value = match t.parse::<InputWord>() {
         Ok(i) => i,
         Err(_) => {
           return Err(Box::<dyn Error>::from(format!(
@@ -172,11 +201,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     .last()
     .map(|&reg_id| reg_id.wrapping_sub(b'0'))
     .ok_or("Invalid input: unable to parse register specification.")?;
-  if reg_id > 5 {
-    eprintln!("Invalid input: specify a register in [0, 5] range.");
+  if reg_id >= Cpu::REG_COUNT {
+    eprintln!(
+      "Invalid input: specify a register in [0, {}) range.",
+      Cpu::REG_COUNT
+    );
     return Ok(());
   }
-  let pgm = parse_program()?;
+  let program = parse_program()?;
+  let mut cpu = Cpu::new(reg_id);
+
+  cpu.run(&program);
+  println!("Value of register 0: {}", cpu.reg[0]);
 
   Ok(())
 }
