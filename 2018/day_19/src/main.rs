@@ -4,6 +4,8 @@ use std::{
   io::{self, BufRead},
 };
 
+mod math;
+
 type Word = u32;
 type InputWord = u8;
 type Instruction = [InputWord; 4];
@@ -51,6 +53,19 @@ impl Cpu<'_> {
       let i = program[self.get_ip()];
       (self.op[i[0] as usize])(self, i[1], i[2], i[3]);
       self.inc_ip();
+      // Program is trying to factorize a large number inefficiently!
+      if self.get_ip() == 3 {
+        // set sum of factors to reg 0 (Accumulator)
+        self.reg[0] =
+          math::factors(self.reg[5] as u64).iter().sum::<u64>() as Word;
+        // copy large number to remaining registers as though loops completed
+        self.reg[1] = self.reg[5];
+        self.reg[2] = self.reg[5];
+        // D will have the last factor found i.e. number itself
+        self.reg[3] = self.reg[5];
+        // set IP to move control just out of this (assembly) loop
+        self.set_ip(16);
+      }
     }
   }
 
@@ -64,6 +79,10 @@ impl Cpu<'_> {
 
   fn get_ip(&mut self) -> usize {
     self.reg[self.ip as usize] as usize
+  }
+
+  fn clear(&mut self) {
+    self.reg.fill(0);
   }
 
   // operations
@@ -211,6 +230,11 @@ fn main() -> Result<(), Box<dyn Error>> {
   let program = parse_program()?;
   let mut cpu = Cpu::new(reg_id);
 
+  cpu.run(&program);
+  println!("Value of register 0: {}", cpu.reg[0]);
+
+  cpu.clear();
+  cpu.seti(1, 0, 0);
   cpu.run(&program);
   println!("Value of register 0: {}", cpu.reg[0]);
 
