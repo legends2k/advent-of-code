@@ -53,15 +53,17 @@ impl Cpu<'_> {
       (self.op[i[0] as usize])(self, i[1], i[2], i[3]);
       self.inc_ip();
       // Program is trying to factorize a large number inefficiently!
-      if self.get_ip() == 3 {
+      if self.get_ip() == 4 {
+        let large = *self.reg.iter().max().unwrap();
+        let sum = math::factors(large as u64).iter().sum::<u64>() as Word;
         // set sum of factors to reg 0 (Accumulator)
-        self.reg[0] =
-          math::factors(self.reg[5] as u64).iter().sum::<u64>() as Word;
+        self.reg[0] = sum;
         // copy large number to remaining registers as though loops completed
-        self.reg[1] = self.reg[5];
-        self.reg[2] = self.reg[5];
-        // D will have the last factor found i.e. number itself
-        self.reg[3] = self.reg[5];
+        //   one register already had it (largest)
+        //   two were incremented as loop counters (B) and (C)
+        //   one will have the last factor found i.e. number itself
+        //   IP will be overwritten with correct jump
+        self.reg[1..].fill(large);
         // set IP to move control just out of this (assembly) loop
         self.set_ip(16);
       }
