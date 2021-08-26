@@ -61,7 +61,8 @@ where
   products
 }
 
-// Deducing factors form prime factors of n
+// Deducing factors of n from its prime factors; not doing the brute
+// force approach of iterating over 1..=n and checking n % i == 0
 // https://math.stackexchange.com/q/2782625/51968
 // https://stackoverflow.com/a/29451566/183120
 /// Returns all factors of `n`.
