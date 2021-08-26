@@ -1,5 +1,4 @@
 use std::{
-  collections::HashMap,
   error::Error,
   io::{self, BufRead},
 };
@@ -154,24 +153,6 @@ impl Cpu<'_> {
 }
 
 fn parse_program() -> Result<Vec<Instruction>, Box<dyn Error>> {
-  let mut mnemonics_to_opcodes = HashMap::with_capacity(16);
-  mnemonics_to_opcodes.insert("borr", 0u8);
-  mnemonics_to_opcodes.insert("addr", 1);
-  mnemonics_to_opcodes.insert("eqrr", 2);
-  mnemonics_to_opcodes.insert("addi", 3);
-  mnemonics_to_opcodes.insert("eqri", 4);
-  mnemonics_to_opcodes.insert("eqir", 5);
-  mnemonics_to_opcodes.insert("gtri", 6);
-  mnemonics_to_opcodes.insert("mulr", 7);
-  mnemonics_to_opcodes.insert("setr", 8);
-  mnemonics_to_opcodes.insert("gtir", 9);
-  mnemonics_to_opcodes.insert("muli", 10);
-  mnemonics_to_opcodes.insert("banr", 11);
-  mnemonics_to_opcodes.insert("seti", 12);
-  mnemonics_to_opcodes.insert("gtrr", 13);
-  mnemonics_to_opcodes.insert("bani", 14);
-  mnemonics_to_opcodes.insert("bori", 15);
-
   let mut program = Vec::with_capacity(64);
   for (i, l) in io::stdin().lock().lines().enumerate() {
     let line = l?;
@@ -182,11 +163,24 @@ fn parse_program() -> Result<Vec<Instruction>, Box<dyn Error>> {
       ));
     }
     let mut instr: Instruction = [0; 4];
-    instr[0] = match mnemonics_to_opcodes.get(tokens[0]) {
-      Some(&code) => code,
-      None => {
-        return Err(Box::<dyn Error>::from("Unrecognized operation name"))
-      }
+    instr[0] = match tokens[0] {
+      "borr" => 0,
+      "addr" => 1,
+      "eqrr" => 2,
+      "addi" => 3,
+      "eqri" => 4,
+      "eqir" => 5,
+      "gtri" => 6,
+      "mulr" => 7,
+      "setr" => 8,
+      "gtir" => 9,
+      "muli" => 10,
+      "banr" => 11,
+      "seti" => 12,
+      "gtrr" => 13,
+      "bani" => 14,
+      "bori" => 15,
+      _ => return Err(Box::<dyn Error>::from("Unrecognized operation name")),
     };
     // following can’t be done in a functional fashion since iter::map’s closure
     // can’t do returning of a Result from this function
@@ -231,12 +225,15 @@ fn main() -> Result<(), Box<dyn Error>> {
   let mut cpu = Cpu::new(reg_id);
 
   cpu.run(&program);
-  println!("Value of register 0: {}", cpu.reg[0]);
+  println!("Value of register 0 after running elfcode: {}", cpu.reg[0]);
 
   cpu.clear();
   cpu.seti(1, 0, 0);
   cpu.run(&program);
-  println!("Value of register 0: {}", cpu.reg[0]);
+  println!(
+    "Value of register 0 after running elfcode with reg 0 = 1: {}",
+    cpu.reg[0]
+  );
 
   Ok(())
 }
