@@ -47,8 +47,9 @@ pub mod prime {
   }
 }
 
-/// Returns cartesean product of `a` and `b` by computing it with `f`.
-fn cartesean_product<P, R>(a: &[u64], b: &[u64], f: P) -> Vec<R>
+// Refer itertools::cartesian_product for an iterator-based solution
+/// Returns cartesian product of `a` and `b` by computing it with `f`.
+fn cartesian_product<P, R>(a: &[u64], b: &[u64], f: P) -> Vec<R>
 where
   P: Fn(u64, u64) -> R,
 {
@@ -101,9 +102,9 @@ pub fn factors(n: u64) -> Vec<u64> {
   // Total factors needed = ranges.iter().fold(1, |acc, &r| acc * r.len())
 
   let productor = |x, y| x * y;
-  let mut factors = cartesean_product(ranges[0], ranges[1], productor);
+  let mut factors = cartesian_product(ranges[0], ranges[1], productor);
   for &r in &ranges[2..] {
-    factors = cartesean_product(&factors, r, productor);
+    factors = cartesian_product(&factors, r, productor);
   }
   factors
 }
