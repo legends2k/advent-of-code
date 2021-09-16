@@ -16,10 +16,10 @@ fn compute_dims(input: &str) -> Result<(Point, Point), Box<dyn Error>> {
     .take_while(|&c| c != b'$')
   {
     match c {
-      b'N' => pos.1 += 2,
+      b'N' => pos.1 -= 2,
       b'E' => pos.0 += 2,
       b'W' => pos.0 -= 2,
-      b'S' => pos.1 -= 2,
+      b'S' => pos.1 += 2,
       b'(' => fork_points.push(pos),
       b'|' => pos = *fork_points.last().ok_or("Invalid input")?,
       b')' => {
@@ -40,7 +40,29 @@ fn compute_dims(input: &str) -> Result<(Point, Point), Box<dyn Error>> {
   // + 1 as we want stops and not spans
   let dim_x = max.0 - min.0 + 1;
   let dim_y = max.1 - min.1 + 1;
-  Ok((Point(dim_x, dim_y), Point(-min.0, max.1)))
+  Ok((Point(dim_x, dim_y), Point(-min.0, -min.1)))
+}
+
+struct Map {
+  data: Vec<u8>,
+  width: usize,
+  height: usize,
+}
+
+impl Map {
+  fn new(width: usize, height: usize) -> Self {
+    Map {
+      data: vec![b'#'; width * height],
+      width,
+      height,
+    }
+  }
+
+  fn set(&mut self, p: &Point, value: u8) {
+    // support `p` with negative values too; cast to i32 and back
+    let idx = (self.width as i32 * p.1 + p.0) as usize;
+    self.data[idx] = value;
+  }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -49,7 +71,8 @@ fn main() -> Result<(), Box<dyn Error>> {
   io::stdin().read_to_string(&mut input)?;
   input.pop();
 
-  compute_dims(&input)?;
+  let (dims, pos) = compute_dims(&input)?;
+  let mut m = Map::new(dims.0 as usize, dims.1 as usize);
 
   Ok(())
 }
