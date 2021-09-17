@@ -199,8 +199,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     .max_by(|&a, &b| a.1.cmp(b.1))
     .ok_or("No rooms.  Invalid input!")?;
   println!(
-    "Room @ ({}, {}) farthest with {} doors in between",
+    "Room @ ({}, {}) farthest; doors in between: {}",
     farthest_room.0 .0, farthest_room.0 .1, farthest_room.1
+  );
+
+  // Part 2: rooms needing ≥ 1000 door to pass through
+  println!(
+    "Rooms needing to cross 1000+ doors: {}",
+    rooms_doors
+      .iter()
+      .filter(|&(_, &dist)| dist >= 1000)
+      .count()
   );
 
   Ok(())
