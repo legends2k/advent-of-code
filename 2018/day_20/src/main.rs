@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Read};
+use std::mem;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
 struct Point(i32, i32);
 
 impl Point {
@@ -79,6 +81,53 @@ impl Map {
     let idx = (self.width as i32 * p.1 + p.0) as usize;
     self.data[idx] = value;
   }
+
+  fn get(&self, p: Point) -> u8 {
+    let idx = (self.width as i32 * p.1 + p.0) as usize;
+    self.data[idx]
+  }
+
+  fn is_reachable(&self, p: Point, dir: u8) -> Option<Point> {
+    match dir {
+      b'N' if self.get(p.climb(-1)) == b'-' => Some(p.climb(-2)),
+      b'S' if self.get(p.climb(1)) == b'-' => Some(p.climb(2)),
+      b'W' if self.get(p.slide(-1)) == b'|' => Some(p.slide(-2)),
+      b'E' if self.get(p.slide(1)) == b'|' => Some(p.slide(2)),
+      _ => None,
+    }
+  }
+
+  fn visit_rooms(&self, pos: Point) -> HashMap<Point, u16> {
+    let mut room_door_count =
+      HashMap::<Point, u16>::with_capacity(self.width * self.height);
+    let mut visiting = Vec::<Point>::with_capacity(256);
+    let mut to_visit = Vec::<Point>::with_capacity(256);
+    to_visit.extend(
+      [b'N', b'E', b'W', b'S']
+        .iter()
+        .filter_map(|&dir| self.is_reachable(pos, dir))
+        .collect::<Vec<Point>>(),
+    );
+    let mut cur_dist = 0;
+    while !to_visit.is_empty() {
+      mem::swap(&mut visiting, &mut to_visit);
+      to_visit.clear();
+      cur_dist += 1;
+      while let Some(pt) = visiting.pop() {
+        // skip if already visited
+        if room_door_count.get(&pt).is_none() {
+          room_door_count.insert(pt, cur_dist);
+          to_visit.extend(
+            [b'N', b'E', b'W', b'S']
+              .iter()
+              .filter_map(|&dir| self.is_reachable(pt, dir))
+              .collect::<Vec<Point>>(),
+          );
+        }
+      }
+    }
+    room_door_count
+  }
 }
 
 impl Debug for Map {
@@ -142,7 +191,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
   let (dims, pos) = compute_dims(&input)?;
   let m = Map::new(dims, pos, &input);
-  println!("{:?}", m);
+
+  // Part 1: farthest room with maximum doors to cross
+  let rooms_doors = m.visit_rooms(pos);
+  let farthest_room = rooms_doors
+    .iter()
+    .max_by(|&a, &b| a.1.cmp(b.1))
+    .ok_or("No rooms.  Invalid input!")?;
+  println!(
+    "Room @ ({}, {}) farthest with {} doors in between",
+    farthest_room.0 .0, farthest_room.0 .1, farthest_room.1
+  );
 
   Ok(())
 }
