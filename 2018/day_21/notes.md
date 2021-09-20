@@ -75,6 +75,13 @@ loop {
 ```
 
 Part 1: whatever `r4` reaches first when checked against `r0`
-  - Happens in second iteration of the second `loop`
+  - Happens in second iteration of the inner `loop`
   - Iteration 1: r5 is set from `65536` to `256`
   - Iteration 2: r5 is set from `256` to `1`
+
+Part 2
+  - tried analysing assembly
+  - looked for patterns by printing `r4` values
+  - looks like most solved it by looking for a repeat in `r4` value
+
+An optimisation would be to cut the innermost loop (`r1`, `r2`) and directly do `r5 /= 256`.

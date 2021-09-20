@@ -1,4 +1,5 @@
 use std::{
+  collections::HashSet,
   error::Error,
   io::{self, BufRead},
 };
@@ -12,6 +13,11 @@ struct Cpu<'a> {
   ip: u8, // < REG_COUNT
   op:
     [fn(&mut Cpu<'a>, InputWord, InputWord, InputWord); Cpu::OP_COUNT as usize],
+
+  // data for part 2
+  halt: bool,
+  checked_values: HashSet<Word>,
+  checked_last: Word,
 }
 
 impl Cpu<'_> {
@@ -41,12 +47,15 @@ impl Cpu<'_> {
         Self::bani,
         Self::bori,
       ],
+      halt: false,
+      checked_values: HashSet::<Word>::with_capacity(10_240),
+      checked_last: 0,
     }
   }
 
   fn run(&mut self, program: &[Instruction]) {
     self.set_ip(0);
-    while self.get_ip() < program.len() {
+    while self.get_ip() < program.len() && !self.halt {
       let i = program[self.get_ip()];
       (self.op[i[0] as usize])(self, i[1], i[2], i[3]);
       self.inc_ip();
@@ -63,10 +72,6 @@ impl Cpu<'_> {
 
   fn get_ip(&mut self) -> usize {
     self.reg[self.ip as usize] as usize
-  }
-
-  fn clear(&mut self) {
-    self.reg.fill(0);
   }
 
   // operations
@@ -131,14 +136,22 @@ impl Cpu<'_> {
     self.reg[c as usize] = (self.reg[a as usize] == b as Word) as Word;
   }
 
-  fn eqrr(&mut self, a: InputWord, _: InputWord, c: InputWord) {
-    println!(
-      "Set R0 to {} to halt after fewest instructions",
-      self.reg[a as usize]
-    );
-    self.reg[c as usize] = self.reg[a as usize];
-    // self.reg[c as usize] =
-    //   (self.reg[a as usize] == self.reg[b as usize]) as Word;
+  fn eqrr(&mut self, a: InputWord, b: InputWord, c: InputWord) {
+    match self.checked_values.insert(self.reg[a as usize]) {
+      true => {
+        self.checked_last = self.reg[a as usize];
+        if self.checked_values.len() == 1 {
+          println!(
+            "Set R0 to {} to halt after fewest instructions",
+            self.reg[a as usize]
+          );
+        }
+      }
+      false => self.halt = true, // we’ve a winner!
+    }
+
+    self.reg[c as usize] =
+      (self.reg[a as usize] == self.reg[b as usize]) as Word;
   }
 }
 
@@ -215,6 +228,12 @@ fn main() -> Result<(), Box<dyn Error>> {
   let mut cpu = Cpu::new(reg_id);
 
   cpu.run(&program);
+
+  // part 2
+  println!(
+    "Set R0 to {} to halt after most instructions",
+    cpu.checked_last
+  );
 
   Ok(())
 }
