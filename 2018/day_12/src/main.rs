@@ -54,10 +54,10 @@ impl Plants {
   }
 
   fn trim(&mut self) {
-    while *self.pot.back().expect("Last can't be empty") == false {
+    while !*self.pot.back().expect("Last can't be empty") {
       self.pot.pop_back();
     }
-    while *self.pot.front().expect("First can't be empty") == false {
+    while !*self.pot.front().expect("First can't be empty") {
       self.pot.pop_front();
       self.start_idx += 1;
     }
@@ -190,7 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut rules = [false; 32];
   for l in io::stdin().lock().lines() {
     let line = l?;
-    if line.ends_with("#") {
+    if line.ends_with('#') {
       let idx: u8 = line[0..5]
         .chars()
         .enumerate()
@@ -200,9 +200,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       // println!("{} --> rule[{}] = {}", line, idx, rules[idx as usize]);
     }
   }
-  assert_eq!(
-    rules[0b00000] || rules[0b00001] || rules[0b10000],
-    false,
+  assert!(
+    !(rules[0b00000] || rules[0b00001] || rules[0b10000]),
     "Implementation won't work for this input"
   );
 
