@@ -13,31 +13,44 @@ enum RegionType {
   Narrow,
 }
 
+struct Region {
+  erosion: u64,
+  cost: [i32; 2], // per-tool cost
+}
+
+impl Region {
+  fn new(erosion: u64) -> Self {
+    Region {
+      erosion,
+      cost: [i32::MIN; 2],
+    }
+  }
+}
+
 struct Map {
   depth: u16,
-  width: i32,
-  height: i32,
-  erosion: HashMap<Point, u64>,
+  target: Point,
+  cells: HashMap<Point, Region>,
 }
 
 impl Map {
-  fn new(depth: u16, width: i32, height: i32) -> Self {
+  fn new(depth: u16, target: Point) -> Self {
     let mut m = Map {
       depth,
-      width,
-      height,
-      erosion: HashMap::<Point, u64>::with_capacity(
-        (width * height * 2) as usize,
+      target,
+      cells: HashMap::<Point, Region>::with_capacity(
+        (target.0 * target.1 * 2) as usize,
       ),
     };
-    m.erosion.insert(Point(0, 0), depth as u64 % 20183);
-    m.erosion.insert(Point(width, height), depth as u64 % 20183);
+    m.cells
+      .insert(Point(0, 0), Region::new(depth as u64 % 20183));
+    m.cells.insert(target, Region::new(depth as u64 % 20183));
     m
   }
 
   fn get_erosion(&mut self, pt: Point) -> u64 {
-    match self.erosion.get(&pt) {
-      Some(&x) => x,
+    match self.cells.get(&pt) {
+      Some(Region { erosion, .. }) => *erosion,
       None => {
         let depth = self.depth as u64;
         let e = match pt {
@@ -49,7 +62,7 @@ impl Map {
             (self.get_erosion(left) * self.get_erosion(up) + depth) % 20183
           }
         };
-        self.erosion.insert(pt, e);
+        self.cells.insert(pt, Region::new(e));
         e
       }
     }
@@ -66,13 +79,22 @@ impl Map {
   }
 
   fn risk_level(&mut self) -> u32 {
-    let width = self.width;
-    let height = self.height;
+    let width = self.target.0;
+    let height = self.target.1;
     (0..=width)
       .flat_map(|x| (0..=height).map(move |y| Point(x, y)))
       .map(|pt| self.get_type(pt) as u32)
       .sum()
   }
+}
+
+fn shortest_path_cost(m: &Map) -> u32 {
+  // Go to adjacent cell with least cost
+  //   Put cost-to-reach in each cell
+  // Keep going in all 4 directions
+  // Target reached
+  // Drop yet-to-visit cells with higher cost
+  // Complete all yet-to-visit cells with lower cost
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -95,7 +117,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .ok_or("Invalid input")?;
   let target_pos = Point(target.0.parse()?, target.1.parse()?);
 
-  let mut m = Map::new(depth, target_pos.0, target_pos.1);
+  let mut m = Map::new(depth, target_pos);
   // Part 1: print risk level of rectangle from cave mouth to target
   println!("Risk level: {}", m.risk_level());
 
