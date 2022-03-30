@@ -1,9 +1,10 @@
 use std::{
   collections::{HashMap, VecDeque},
   error::Error,
-  fmt::{self, Debug, Formatter},
+  fmt::Debug,
   io::stdin,
   mem,
+  ops::{Index, IndexMut},
 };
 
 #[derive(Hash, PartialEq, Eq, Copy, Clone, Debug)]
@@ -18,10 +19,9 @@ impl Point {
 #[repr(u8)]
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 enum Tool {
-  None,
   Gear,
   Torch,
-  Unkown,
+  None,
 }
 
 #[repr(u8)]
@@ -67,37 +67,61 @@ impl RegionType {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+struct Path {
+  cost: Option<u32>,
+  from: Point,
+}
+
+impl Path {
+  fn new(from: Point) -> Self {
+    Path { cost: None, from }
+  }
+}
+
+#[derive(Clone, Debug)]
+struct Pathing([Path; 3]);
+
+impl Index<Tool> for Pathing {
+  type Output = Path;
+
+  fn index(&self, idx: Tool) -> &Self::Output {
+    &self.0[idx as usize]
+  }
+}
+
+impl IndexMut<Tool> for Pathing {
+  fn index_mut(&mut self, idx: Tool) -> &mut Self::Output {
+    &mut self.0[idx as usize]
+  }
+}
+
+#[derive(Clone, Debug)]
 struct Region {
   erosion: u64,
-  // negative implies yet-to-reach
-  cost: i32, // per-tool cost
-  tool: Tool,
-  from: Point,
+  pathing: Pathing,
 }
 
 impl Region {
   fn new(erosion: u64) -> Self {
     Region {
       erosion,
-      cost: i32::MIN,
-      tool: Tool::Unkown,
-      from: Point(0, 0),
+      pathing: Pathing([
+        Path::new(Point(-1, -1)),
+        Path::new(Point(-1, -1)),
+        Path::new(Point(-1, -1)),
+      ]),
     }
   }
-}
 
-impl Debug for Region {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    write!(
-      f,
-      "{:?} \t {:?} \t {:?} \t {}",
-      RegionType::get(self.erosion),
-      self.from,
-      self.tool,
-      self.cost
-    )?;
-    Ok(())
+  // |cost| is considered cheaper if region has no costs for any tool
+  // or if no cost is greater than |cost|
+  fn is_cheaper(&self, cost: u32) -> bool {
+    self.pathing.0.iter().all(|p| p.cost.is_none())
+      || self.pathing.0.iter().any(|p| match p.cost {
+        Some(c) => cost <= c,
+        _ => false,
+      })
   }
 }
 
@@ -163,7 +187,7 @@ impl Map {
   }
 }
 
-fn shortest_path(m: &mut Map, target: Point) -> i32 {
+fn shortest_path(m: &mut Map, target: Point) -> u32 {
   // Visit every adjacent cell
   //   Put cost-to-reach
   // Keep going in all 4 directions
@@ -171,30 +195,22 @@ fn shortest_path(m: &mut Map, target: Point) -> i32 {
   // Drop yet-to-visit cells with higher cost
   // Complete all yet-to-visit cells with lower cost
 
-  // Every node X has adjacent nodes Y1, Y2, ….  Every Y has two edges from X:
-  //   1. With tool A
-  //   2. With tool B
-  // Shortest path from X to Y depends on the equiped tool when arriving at X.
-  // However, once the cost and tool to arrive at X is known, the shortest edge
-  // is eihter (1) or (2).  If in future a shorter route to X (with a different
-  // tool) is found, we anyway move X to Open and revisit its descendants.
-
-  let mut to_visit = VecDeque::<Point>::with_capacity(256);
-  let mut visiting = VecDeque::<Point>::with_capacity(256);
+  let mut to_visit = VecDeque::<(Point, Tool)>::with_capacity(256);
+  let mut visiting = VecDeque::<(Point, Tool)>::with_capacity(256);
   let mouth = m.get_region(Point(0, 0)).unwrap();
-  mouth.tool = Tool::Torch;
-  mouth.cost = 0;
-  to_visit.push_back(Point(0, 0));
-  let mut reached = false;
-  let mut target_cost = i32::MIN;
+  mouth.pathing[Tool::Torch].cost = Some(0);
+  mouth.pathing[Tool::Torch].from = Point(-1, -1);
+  to_visit.push_back((Point(0, 0), Tool::Torch));
 
   while !to_visit.is_empty() {
     mem::swap(&mut visiting, &mut to_visit);
 
-    while let Some(pos) = visiting.pop_front() {
+    while let Some((pos, tool)) = visiting.pop_front() {
       let region = m.get_region(pos).unwrap().clone();
+      let cost = region.pathing[tool].cost.expect("Should be some cost");
+
       // only pursue paths less costlier than current target cost if reached
-      if reached && (region.cost >= target_cost) {
+      if !m.get_region(m.target).unwrap().is_cheaper(cost) {
         continue;
       }
       let adjs = [
@@ -205,47 +221,49 @@ fn shortest_path(m: &mut Map, target: Point) -> i32 {
       ];
       for adj_pos in adjs {
         if let Some(adj_region) = m.get_region(adj_pos) {
-          let (mut cost, mut tool) =
-            match RegionType::get(adj_region.erosion).is_allowed(region.tool) {
-              true => ((region.cost + 1), region.tool),
+          let (mut new_cost, mut new_tool) =
+            match RegionType::get(adj_region.erosion).is_allowed(tool) {
+              true => (cost + 1, tool),
               false => (
-                (region.cost + 1 + 7),
-                RegionType::get(region.erosion).get_alternate(region.tool),
+                cost + 1 + 7,
+                RegionType::get(region.erosion).get_alternate(tool),
               ),
             };
-          // if target, include switching cost if not holding torch already
-          if (adj_pos == target) && (adj_region.tool != Tool::Torch) {
-            tool = Tool::Torch;
-            cost += 7;
+          // if target region include torch-switch cost if not holding it
+          if adj_pos == target && new_tool != Tool::Torch {
+            new_tool = Tool::Torch;
+            new_cost += 7;
           }
-          if pos == Point(4, 1) && adj_pos == Point(4, 2) {
-            println!("{} -- {} ({:?})", adj_region.cost, cost, tool);
-          }
-          // update if already visited and has a lesser cost
-          if (adj_region.cost >= 0) && (adj_region.cost < cost) {
+          // skip update if already visited and has lesser cost
+          if !adj_region.is_cheaper(new_cost) {
             continue;
           }
-          if pos == Point(4, 1) && adj_pos == Point(4, 2) {
-            println!("here!");
-          }
-          // (adj_region.cost > 0) && (adj_region.cost > cost)
-          // Not worrying about: already reached with greater cost as this
-          // iteration will anyway start new follow-ups.
-          adj_region.cost = cost;
-          adj_region.tool = tool;
-          adj_region.from = pos;
-          if adj_pos == target {
-            target_cost = cost;
-            reached = true;
-          } else if !reached || (cost < target_cost) {
+          // (adj_region.cost > 0) && (adj_region.cost > cost) Not worrying
+          // about the situation where we’ve found a better solution as will
+          // anyway start new follow-up by pushing to |to_visit|.
+          adj_region.pathing[new_tool].cost = Some(new_cost);
+          adj_region.pathing[new_tool].from = pos;
+          // don’t enlist in to_visit if we’ve already reached or if new cost
+          // is cheaper than target’s current costs
+          if adj_pos != target
+            && m.get_region(m.target).unwrap().is_cheaper(new_cost)
+          {
             // pursue if target unreached or this cell’s cost is lesser
-            to_visit.push_back(adj_pos);
+            to_visit.push_back((adj_pos, new_tool));
           }
         }
       }
     }
   }
-  target_cost
+  m.get_region(m.target)
+    .unwrap()
+    .pathing
+    .0
+    .iter()
+    .min_by_key(|&p| p.cost.unwrap_or(u32::MAX))
+    .unwrap()
+    .cost
+    .unwrap()
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -276,17 +294,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     "Fastest path to target: {}",
     shortest_path(&mut m, target_pos)
   );
-  dbg!(m.get_region(Point(1, 1)).unwrap());
-  dbg!(m.get_region(Point(2, 1)).unwrap());
-  dbg!(m.get_region(Point(3, 1)).unwrap());
-  dbg!(m.get_region(Point(4, 1)).unwrap());
-  dbg!(m.get_region(Point(4, 2)).unwrap());
-  dbg!(m.get_region(Point(4, 3)).unwrap());
-  dbg!(m.get_region(Point(4, 4)).unwrap());
-  dbg!(m.get_region(Point(4, 5)).unwrap());
-  dbg!(m.get_region(Point(4, 6)).unwrap());
-  dbg!(m.get_region(Point(4, 7)).unwrap());
-  dbg!(m.get_region(Point(4, 8)).unwrap());
 
   Ok(())
 }
