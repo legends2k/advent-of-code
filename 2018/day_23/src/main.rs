@@ -1,14 +1,18 @@
 use std::{
   error::Error,
   io::{self, BufRead},
+  ops::Sub,
   str::FromStr,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct Point(i32, i32, i32);
 
-impl Point {
-  fn l1_distance(&self, other: &Self) -> u64 {
+// Manhattan/Taxicab (L1) distance
+impl Sub for Point {
+  type Output = u64;
+
+  fn sub(self, other: Self) -> Self::Output {
     ((self.0 as i64 - other.0 as i64).abs()
       + (self.1 as i64 - other.1 as i64).abs()
       + (self.2 as i64 - other.2 as i64).abs()) as u64
@@ -19,6 +23,12 @@ impl Point {
 struct Bot {
   pos: Point,
   radius: u32,
+}
+
+impl Bot {
+  fn is_in_range(&self, p: Point) -> bool {
+    (self.pos - p) <= self.radius as u64
+  }
 }
 
 impl FromStr for Bot {
@@ -48,10 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
   println!(
     "Count of nanobots in range to strongest signal bot: {}",
-    bots
-      .iter()
-      .filter(|&b| b.pos.l1_distance(&max_bot.pos) <= (max_bot.radius as u64))
-      .count()
+    bots.iter().filter(|&b| max_bot.is_in_range(b.pos)).count()
   );
 
   Ok(())
