@@ -1,5 +1,5 @@
 use std::{
-  cmp::Reverse,
+  cmp::{Ordering, Reverse},
   collections::BinaryHeap,
   error::Error,
   fmt::{self, Display, Formatter},
@@ -8,17 +8,15 @@ use std::{
   str::FromStr,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
-struct Point(i32, i32, i32);
+#[derive(Debug, Copy, Clone)]
+struct Point(f64, f64, f64);
 
 // Manhattan/Taxicab (L1) distance
 impl Sub for Point {
-  type Output = u64;
+  type Output = Self;
 
   fn sub(self, other: Self) -> Self::Output {
-    ((self.0 as i64 - other.0 as i64).abs()
-      + (self.1 as i64 - other.1 as i64).abs()
-      + (self.2 as i64 - other.2 as i64).abs()) as u64
+    Point(self.0 - other.0, self.1 - other.1, self.2 - other.2)
   }
 }
 
@@ -31,8 +29,7 @@ impl Add for Point {
 }
 
 impl Point {
-  fn add(self, delta: u32) -> Self {
-    let d = delta as i32;
+  fn add(self, d: f64) -> Self {
     Point(self.0 + d, self.1 + d, self.2 + d)
   }
 
@@ -40,12 +37,46 @@ impl Point {
     Point(self.0.abs(), self.1.abs(), self.2.abs())
   }
 
-  fn max(self) -> i32 {
-    *[self.0, self.1, self.2].iter().max().unwrap_or(&self.0)
+  fn max(self) -> f64 {
+    if self.0 >= self.1 && self.0 >= self.2 {
+      self.0
+    } else if self.1 >= self.0 && self.1 >= self.2 {
+      self.1
+    } else {
+      self.2
+    }
   }
 
-  fn sum(self) -> u64 {
-    self.0 as u64 + self.1 as u64 + self.2 as u64
+  // Sum of all basis components
+  fn sum(self) -> f64 {
+    self.0 + self.1 + self.2
+  }
+
+  fn round(self) -> Self {
+    Point(self.0.round(), self.1.round(), self.2.round())
+  }
+}
+
+impl PartialEq for Point {
+  fn eq(&self, other: &Self) -> bool {
+    ((self.0 - other.0).abs() < 0.5)
+      && ((self.1 - other.1).abs() < 0.5)
+      && ((self.2 - other.2).abs() < 0.5)
+  }
+}
+impl Eq for Point {}
+impl Ord for Point {
+  fn cmp(&self, other: &Self) -> Ordering {
+    (self.0.to_bits(), self.1.to_bits(), self.2.to_bits()).cmp(&(
+      other.0.to_bits(),
+      other.1.to_bits(),
+      other.2.to_bits(),
+    ))
+  }
+}
+impl PartialOrd for Point {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
   }
 }
 
@@ -58,12 +89,12 @@ impl Display for Point {
 #[derive(Debug, Clone)]
 struct Bot {
   pos: Point,
-  radius: u32,
+  radius: f64,
 }
 
 impl Bot {
   fn is_point_in_range(&self, p: Point) -> bool {
-    (self.pos - p) <= self.radius as u64
+    (self.pos - p).abs().sum() <= self.radius
   }
 }
 
@@ -78,81 +109,125 @@ impl FromStr for Bot {
   }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Cube {
+// Using half size for an octant will lead to off-by-one errors; either |centre|
+// and/or |half_size| should be floating point.
+//
+//           |  |  |
+//          -1  0  1
+//
+// Center 0, half size 1 AABB can’t be split with just integers.
+
+struct Aabb {
   centre: Point,
-  half_size: u32,
+  half_size: f64,
 }
 
-impl Cube {
-  fn new(half_size: u32) -> Self {
-    Cube {
-      centre: Point(0, 0, 0),
+impl PartialEq for Aabb {
+  fn eq(&self, other: &Self) -> bool {
+    self.to_bits().eq(&other.to_bits())
+  }
+}
+impl Eq for Aabb {}
+impl Ord for Aabb {
+  fn cmp(&self, other: &Self) -> Ordering {
+    self.to_bits().cmp(&other.to_bits())
+  }
+}
+impl PartialOrd for Aabb {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    self.to_bits().partial_cmp(&other.to_bits())
+  }
+}
+
+impl Aabb {
+  fn to_bits(&self) -> [u64; 4] {
+    [
+      self.half_size.to_bits(),
+      self.centre.0.to_bits(),
+      self.centre.1.to_bits(),
+      self.centre.2.to_bits(),
+    ]
+  }
+
+  fn new(half_size: f64) -> Self {
+    Aabb {
+      centre: Point(0.0, 0.0, 0.0),
       half_size,
     }
   }
 
   fn octants(&self) -> [Self; 8] {
-    let half_size = self.half_size / 2;
-    let hs = half_size as i32;
+    let mut hs = self.half_size / 2.0;
+    if hs.fract() < 0.5 {
+      hs = hs.round();
+    }
     [
-      Cube {
+      Aabb {
         centre: self.centre + Point(hs, hs, hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(-hs, hs, hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(-hs, -hs, hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(hs, -hs, hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(hs, hs, -hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(-hs, hs, -hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(-hs, -hs, -hs),
-        half_size,
+        half_size: hs,
       },
-      Cube {
+      Aabb {
         centre: self.centre + Point(hs, -hs, -hs),
-        half_size,
+        half_size: hs,
       },
     ]
   }
 
-  fn is_in_range(&self, b: &Bot) -> bool {
+  fn has_bot_range(&self, b: &Bot) -> bool {
+    let low = self.centre.add(-self.half_size);
+    let high = self.centre.add(self.half_size);
+    let dist = (b.pos - low).abs().sum() + (b.pos - high).abs().sum();
+    (dist * 0.5) <= ((3.0 * self.half_size) + b.radius)
+
+    // dist(centre.x, pos.x) <= half_size + (radius / 3)
+    // dist(centre.y, pos.y) <= half_size + (radius / 3)
+    // dist(centre.z, pos.z) <= half_size + (radius / 3)
+
     // in 2D: l1(c, p) <= 2 * (half_size + (b.radius / 2))
-    (self.centre - b.pos) <= (3 * self.half_size + b.radius) as u64
+    // (self.centre - b.pos).abs().sum() <= ((3.0 * self.half_size) + b.radius)
   }
 
-  fn distance_from_origin(&self) -> u64 {
+  fn distance_from_origin(&self) -> f64 {
     self.centre.abs().sum()
   }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
   let mut bots = Vec::<Bot>::with_capacity(1000);
-  let mut max_coord: u32 = u32::MIN;
+  let mut max_coord = f64::MIN;
   let mut max_radius_bot_idx = 0;
-  let mut max_radius = 0;
+  let mut max_radius = 0.0;
   for (i, l) in io::stdin().lock().lines().enumerate() {
     let b = Bot::from_str(&l?)?;
     if b.radius > max_radius {
       max_radius = b.radius;
       max_radius_bot_idx = i;
     }
-    let possible_max_coord = b.pos.abs().add(b.radius).max() as u32;
+    let possible_max_coord = b.pos.abs().add(b.radius).max();
     if possible_max_coord > max_coord {
       max_coord = possible_max_coord;
     }
@@ -167,27 +242,32 @@ fn main() -> Result<(), Box<dyn Error>> {
       .filter(|&b| max_bot.is_point_in_range(b.pos))
       .count()
   );
-
-  let cave = Cube::new(max_coord + 1);
-  // max-heap but we want 2nd and 3rd tuple values be weighted by min; flip
+  let cave = Aabb::new(max_coord);
+  // Minimize size of AABB, distance to origin.  Reverse field 2, 3 on max-heap.
   let mut heap = BinaryHeap::new();
   heap.push((
     bots.len(),
-    Reverse(cave.half_size as i32),
-    Reverse(cave.distance_from_origin() as i64),
+    Reverse(cave.half_size.to_bits()),
+    Reverse(cave.distance_from_origin().to_bits()),
     cave,
   ));
-  while let Some((_, _, origin_distance, aabb)) = heap.pop() {
-    if aabb.half_size == 0 {
-      println!("Part 2: {}, {:?}", origin_distance.0, aabb.centre);
+  let mut i = 0;
+  while let Some((bc, _, _, aabb)) = heap.pop() {
+    i += 1;
+    if aabb.half_size < 1.0 {
+      println!(
+        "Distance to most populated point: {}",
+        aabb.centre.round().abs().sum()
+      );
+      println!("Iteration count: {}, Bot count: {}", i, bc);
       break;
     }
     for oct in aabb.octants() {
-      let bot_count = bots.iter().filter(|&bot| oct.is_in_range(bot)).count();
+      let bot_count = bots.iter().filter(|&bot| oct.has_bot_range(bot)).count();
       heap.push((
         bot_count,
-        Reverse(oct.half_size as i32),
-        Reverse(oct.distance_from_origin() as i64),
+        Reverse(oct.half_size.to_bits()),
+        Reverse(oct.distance_from_origin().to_bits()),
         oct,
       ));
     }
