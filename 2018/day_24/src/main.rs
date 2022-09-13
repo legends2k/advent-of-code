@@ -24,9 +24,8 @@ Infection:
   let mut current_group: u32 = 0;
   for line in input.into_inner() {
     match line.as_rule() {
-      Rule::army => {
-        let mut inner_rules = line.into_inner();
-        current_army = inner_rules.next().unwrap().as_str();
+      Rule::army_name => {
+        current_army = line.as_str();
         println!("Army: {}", current_army);
         current_group = 0;
       }
