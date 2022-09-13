@@ -1,0 +1,11 @@
+army_name = { (ASCII_ALPHA | SEPARATOR)+ }
+army = { army_name ~ ":" }
+count = { ASCII_DIGIT+ }
+attack = { ASCII_ALPHA_LOWER+ }
+immunities = { "immune to " ~ attack ~ (", " ~ attack)* }
+weaknesses = { "weak to " ~ attack ~ (", " ~ attack)* }
+// order matters; longer options should precede shorter ones
+traits = { "(" ~ ((immunities ~ "; " ~ weaknesses) | (weaknesses ~ "; " ~ immunities) | weaknesses | immunities) ~ ") " }
+group = { count ~ " units each with " ~ count ~ " hit points " ~ traits? ~ "with an attack that does " ~ count ~ " " ~ attack ~ " damage at initiative " ~ count }
+line = _{ (army | group | NEWLINE) }  // this is silent to directly get to army|group
+file = { SOI ~ line+ ~ EOI }
