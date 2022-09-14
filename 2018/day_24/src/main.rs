@@ -4,33 +4,47 @@ use pest_derive::Parser;
 use std::{
   collections::HashMap,
   error::Error,
+  fmt,
   io::{self, Read},
+  str::FromStr,
 };
 
 #[derive(Parser)]
 #[grammar = "input.pest"]
 pub struct InputParser;
 
-struct Attack(u8);
+struct Attacks(u8);
+
+impl fmt::Debug for Attacks {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "0b{:b}", self.0)
+  }
+}
 
 struct Group {
   units: u32,
   hits: u32,
-  attacks: u32,
-  attack: Attack,
+  damages: u32,
+  attack: Attacks,
   initiative: u8,
-  immunity: u8,
-  weakness: u8,
+  immunity: Attacks,
+  weakness: Attacks,
 }
 
 impl Group {
   fn effective_power(&self) -> u32 {
-    self.units * self.attacks
+    self.units * self.damages
   }
 
   fn is_empty(&self) -> bool {
     self.units <= 0
   }
+}
+
+#[derive(Default)]
+struct Army {
+  groups: Vec<Group>,
+  id: u8,
 }
 
 // PrimInt is yet to get the BITS member; make a new trait.
@@ -58,7 +72,7 @@ fn to_flag<'a, T: Bits + PrimInt>(
   match n < T::BITS {
     true => Ok(*attack_to_flag.entry(attack).or_insert(mask)),
     false => Err(Box::<dyn Error>::from(
-      "More than {T::BITS} attacks; insufficient bit-width.",
+      "More than {T::BITS} distinct attacks; insufficient bit-width.",
     )),
   }
 }
@@ -72,45 +86,48 @@ fn main() -> Result<(), Box<dyn Error>> {
     .next()
     .unwrap();
 
-  let mut current_army: &str;
-  let mut current_group: u32 = 0;
+  let mut armies = [Army::default(), Army::default()];
+  let mut next_army: u8 = 0;
+  let mut next_group: u8 = 0;
   let mut attack_to_flag: HashMap<&str, u8> = HashMap::new();
   for line in input.into_inner() {
     match line.as_rule() {
       Rule::army_name => {
-        current_army = line.as_str();
+        let army = line.as_str();
         // Rust 2021’s introduced Python’s f-string style strings but no
         // expressions allowed within.
         // https://stackoverflow.com/a/70504075/183120
-        println!("Army: {current_army}");
-        current_group = 0;
+        println!("Army: {army}");
+        armies[next_army as usize].id = next_army;
+        next_army += 1;
+        next_group = 0;
       }
       Rule::group => {
-        let mut counts = [""; 4];
+        let mut counts = [0u32; 4];
         let mut idx = 0;
-        let mut attack = "";
-        let mut immunities = Vec::<&str>::with_capacity(4);
-        let mut weaknesses = Vec::<&str>::with_capacity(4);
+        let mut attack = Attacks(0);
+        let mut immunities = 0u8;
+        let mut weaknesses = 0u8;
         for r in line.into_inner() {
           match r.as_rule() {
             Rule::count => {
-              counts[idx] = r.as_str();
+              counts[idx] = u32::from_str(r.as_str())?;
               idx += 1;
             }
             Rule::attack => {
-              attack = r.as_str();
+              attack = Attacks(to_flag(r.as_str(), &mut attack_to_flag)?);
             }
             Rule::traits => {
               for t in r.into_inner() {
                 match t.as_rule() {
                   Rule::immunities => {
                     for i in t.into_inner() {
-                      immunities.push(i.as_str());
+                      immunities |= to_flag(i.as_str(), &mut attack_to_flag)?;
                     }
                   }
                   Rule::weaknesses => {
                     for w in t.into_inner() {
-                      weaknesses.push(w.as_str());
+                      weaknesses |= to_flag(w.as_str(), &mut attack_to_flag)?;
                     }
                   }
                   _ => unreachable!(),
@@ -120,25 +137,23 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => unreachable!(),
           }
         }
-        println!("  Group {current_group}");
+        println!("  Group {next_group}");
         println!("    Units: {}", counts[0]);
         println!("    Hits: {}", counts[1]);
-        println!(
-          "    {:?}: {}",
-          to_flag(attack, &mut attack_to_flag)?,
-          counts[2]
-        );
+        println!("    Attack: {:?} ({})", attack, counts[2]);
         println!("    Initiative: {}", counts[3]);
-        print!("    Immunities: [");
-        for i in &immunities {
-          print!("{}, ", to_flag(i, &mut attack_to_flag)?);
-        }
-        print!("]\n    Weaknesses: [");
-        for w in &weaknesses {
-          print!("{}, ", to_flag(w, &mut attack_to_flag)?);
-        }
-        println!("]");
-        current_group += 1;
+        println!("    Immunities: 0b{immunities:b}");
+        println!("    Weaknesses: 0b{weaknesses:b}");
+        armies[(next_army - 1) as usize].groups.push(Group {
+          units: counts[0],
+          hits: counts[1],
+          damages: counts[2],
+          attack,
+          initiative: counts[3] as u8,
+          immunity: Attacks(immunities),
+          weakness: Attacks(weaknesses),
+        });
+        next_group += 1;
       }
       Rule::EOI => (),
       _ => unreachable!(),
