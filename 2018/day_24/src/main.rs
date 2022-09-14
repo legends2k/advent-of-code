@@ -17,7 +17,7 @@ pub struct InputParser;
 struct Attacks(u8);
 
 impl Attacks {
-  fn to(&self, other: &Attacks) -> bool {
+  fn to(&self, other: Attacks) -> bool {
     (other.0 & self.0) != 0
   }
 }
@@ -46,6 +46,18 @@ impl Group {
 
   fn is_alive(&self) -> bool {
     self.units > 0
+  }
+
+  fn calc_hit(&self, enemy: &Group) -> i32 {
+    match (
+      self.immunity.to(enemy.attack),
+      self.weakness.to(enemy.attack),
+    ) {
+      (true, false) => 0,
+      (false, false) => enemy.effective_power(),
+      (false, true) => enemy.effective_power() * 2,
+      (true, true) => unreachable!(),
+    }
   }
 }
 
@@ -81,16 +93,7 @@ impl Army<'_> {
         }
         let mut enemy_ids: Vec<_> = (0..self.groups.len()).collect();
         enemy_ids.sort_by_cached_key(|&j| {
-          let attack = self.groups[*i as usize].attack;
-          let damage_by_i = match (
-            enemy.groups[j].immunity.to(&attack),
-            enemy.groups[j].weakness.to(&attack),
-          ) {
-            (true, false) => 0,
-            (false, false) => self.groups[*i as usize].effective_power(),
-            (false, true) => self.groups[*i as usize].effective_power() * 2,
-            (true, true) => unreachable!(),
-          };
+          let damage_by_i = enemy.groups[j].calc_hit(&self.groups[*i as usize]);
           (
             match enemy.groups[j].is_alive() {
               true => 0,
