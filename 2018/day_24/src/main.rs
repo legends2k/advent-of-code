@@ -15,6 +15,12 @@ pub struct InputParser;
 
 struct Attacks(u8);
 
+impl Attacks {
+  fn is(&self, other: &Attacks) -> bool {
+    (other.0 & self.0) != 0
+  }
+}
+
 impl fmt::Debug for Attacks {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "0b{:b}", self.0)
@@ -24,7 +30,8 @@ impl fmt::Debug for Attacks {
 struct Group {
   units: u32,
   hits: u32,
-  damages: u32,
+  damages: u16,
+  id: u16,
   attack: Attacks,
   initiative: u8,
   immunity: Attacks,
@@ -33,18 +40,18 @@ struct Group {
 
 impl Group {
   fn effective_power(&self) -> u32 {
-    self.units * self.damages
+    self.units * self.damages as u32
   }
 
-  fn is_empty(&self) -> bool {
-    self.units <= 0
+  fn is_alive(&self) -> bool {
+    self.units > 0
   }
 }
 
 #[derive(Default)]
-struct Army {
+struct Army<'a> {
   groups: Vec<Group>,
-  id: u8,
+  name: &'a str,
 }
 
 // PrimInt is yet to get the BITS member; make a new trait.
@@ -88,17 +95,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
   let mut armies = [Army::default(), Army::default()];
   let mut next_army: u8 = 0;
-  let mut next_group: u8 = 0;
+  let mut next_group: u16 = 0;
   let mut attack_to_flag: HashMap<&str, u8> = HashMap::new();
   for line in input.into_inner() {
     match line.as_rule() {
       Rule::army_name => {
-        let army = line.as_str();
-        // Rust 2021’s introduced Python’s f-string style strings but no
-        // expressions allowed within.
-        // https://stackoverflow.com/a/70504075/183120
-        println!("Army: {army}");
-        armies[next_army as usize].id = next_army;
+        armies[next_army as usize].name = line.as_str();
         next_army += 1;
         next_group = 0;
       }
@@ -137,17 +139,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => unreachable!(),
           }
         }
-        println!("  Group {next_group}");
-        println!("    Units: {}", counts[0]);
-        println!("    Hits: {}", counts[1]);
-        println!("    Attack: {:?} ({})", attack, counts[2]);
-        println!("    Initiative: {}", counts[3]);
-        println!("    Immunities: 0b{immunities:b}");
-        println!("    Weaknesses: 0b{weaknesses:b}");
         armies[(next_army - 1) as usize].groups.push(Group {
           units: counts[0],
           hits: counts[1],
-          damages: counts[2],
+          damages: counts[2] as u16,
+          id: next_group,
           attack,
           initiative: counts[3] as u8,
           immunity: Attacks(immunities),
@@ -159,6 +155,6 @@ fn main() -> Result<(), Box<dyn Error>> {
       _ => unreachable!(),
     }
   }
-  println!("{:?}", attack_to_flag);
+
   Ok(())
 }
