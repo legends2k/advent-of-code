@@ -219,18 +219,34 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
   }
 
-  println!("Immune System");
-  let ids0 = armies[0].sort_for_attack();
-  let choices0 = armies[0].choose_enemy(&ids0, &armies[1]);
-  for (idx, &i) in ids0.iter().enumerate() {
-    println!("{i}: {:?}", choices0[idx as usize]);
-  }
+  let ids = [armies[0].sort_for_attack(), armies[1].sort_for_attack()];
+  let choices = [
+    armies[0].choose_enemy(&ids[0], &armies[1]),
+    armies[1].choose_enemy(&ids[1], &armies[0]),
+  ];
 
-  println!("Infection");
-  let ids1 = armies[1].sort_for_attack();
-  let choices1 = armies[1].choose_enemy(&ids1, &armies[0]);
-  for (idx, &i) in ids1.iter().enumerate() {
-    println!("{i}: {:?}", choices1[idx as usize]);
+  // collect all alive groups with respective army ID
+  let mut attackers: Vec<(u8, u16)> = ids[0]
+    .iter()
+    .filter(|&i| choices[0][*i as usize].is_some())
+    .map(|&i| (0, i))
+    .chain(
+      ids[1]
+        .iter()
+        .filter(|&j| choices[1][*j as usize].is_some())
+        .map(|&j| (1, j)),
+    )
+    .collect::<Vec<(u8, u16)>>();
+
+  attackers.sort_by_key(|&(army_id, group_id)| {
+    -armies[army_id as usize].groups[group_id as usize].initiative
+  });
+
+  for a in &attackers {
+    println!(
+      "{}'s Group {} --> Group {:?}",
+      armies[a.0 as usize].name, a.1, choices[a.0 as usize][a.1 as usize]
+    );
   }
 
   Ok(())
