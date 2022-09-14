@@ -14,15 +14,15 @@ use std::{
 pub struct InputParser;
 
 #[derive(Copy, Clone)]
-struct Attacks(u8);
+struct AttackTypes(u8);
 
-impl Attacks {
-  fn to(&self, other: Attacks) -> bool {
+impl AttackTypes {
+  fn to(&self, other: AttackTypes) -> bool {
     (other.0 & self.0) != 0
   }
 }
 
-impl fmt::Debug for Attacks {
+impl fmt::Debug for AttackTypes {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "0b{:b}", self.0)
   }
@@ -32,10 +32,10 @@ struct Group {
   units: u32,
   hits: u32,
   damages: u32,
-  attack: Attacks,
+  attack: AttackTypes,
   initiative: i8,
-  immunity: Attacks,
-  weakness: Attacks,
+  immunity: AttackTypes,
+  weakness: AttackTypes,
 }
 
 impl Group {
@@ -156,12 +156,13 @@ fn to_flag<'a, T: Bits + PrimInt>(
   }
 }
 
-struct ArmyGroup {
+struct Attack {
   army: usize,
   group: usize,
+  enemy: usize,
 }
 
-impl ArmyGroup {
+impl Attack {
   fn enemy_army(&self) -> usize {
     // make a bool and convert to integral as !1u8 = 254
     (self.army == 0) as usize
@@ -189,7 +190,7 @@ fn main() -> Result<(), Box<dyn Error>> {
       Rule::group => {
         let mut counts = [0u32; 4];
         let mut idx = 0;
-        let mut attack = Attacks(0);
+        let mut attack = AttackTypes(0);
         let mut immunities = 0u8;
         let mut weaknesses = 0u8;
         for r in line.into_inner() {
@@ -199,7 +200,7 @@ fn main() -> Result<(), Box<dyn Error>> {
               idx += 1;
             }
             Rule::attack => {
-              attack = Attacks(to_flag(r.as_str(), &mut attack_to_flag)?);
+              attack = AttackTypes(to_flag(r.as_str(), &mut attack_to_flag)?);
             }
             Rule::traits => {
               for t in r.into_inner() {
@@ -227,8 +228,8 @@ fn main() -> Result<(), Box<dyn Error>> {
           damages: counts[2],
           attack,
           initiative: counts[3] as i8,
-          immunity: Attacks(immunities),
-          weakness: Attacks(weaknesses),
+          immunity: AttackTypes(immunities),
+          weakness: AttackTypes(weaknesses),
         });
       }
       Rule::EOI => (),
@@ -243,41 +244,42 @@ fn main() -> Result<(), Box<dyn Error>> {
   ];
 
   // collect all alive groups with respective army ID
-  let mut attackers: Vec<ArmyGroup> = ids[0]
+  let mut fight: Vec<Attack> = ids[0]
     .iter()
-    .filter(|&i| choices[0][*i as usize].is_some())
-    .map(|&i| ArmyGroup {
-      army: 0,
-      group: i as usize,
+    .filter_map(|&i| match choices[0][i as usize] {
+      Some(enemy) => Some(Attack {
+        army: 0,
+        group: i as usize,
+        enemy: enemy.into(),
+      }),
+      None => None,
     })
-    .chain(
-      ids[1]
-        .iter()
-        .filter(|&j| choices[1][*j as usize].is_some())
-        .map(|&j| ArmyGroup {
-          army: 1,
-          group: j as usize,
-        }),
-    )
-    .collect::<Vec<ArmyGroup>>();
+    .chain(ids[1].iter().filter_map(|&j| match choices[1][j as usize] {
+      Some(enemy) => Some(Attack {
+        army: 1,
+        group: j as usize,
+        enemy: enemy.into(),
+      }),
+      None => None,
+    }))
+    .collect::<Vec<Attack>>();
 
-  attackers
-    .sort_by_key(|pair| -armies[pair.army].groups[pair.group].initiative);
+  fight.sort_by_key(|a| -armies[a.army].groups[a.group].initiative);
 
-  for a in &attackers {
+  for attack in &fight {
     println!(
-      "{}'s Group {} --> {}'s Group {:?}",
-      armies[a.army].name,
-      a.group,
-      armies[a.enemy_army()].name,
-      choices[a.army][a.group]
+      "{}'s Group {} --> {}'s Group {}",
+      armies[attack.army].name,
+      attack.group,
+      armies[attack.enemy_army()].name,
+      attack.enemy
     );
-    let defender = &armies[a.enemy_army()].groups
-      [choices[a.army][a.group].unwrap() as usize];
-    let attacker = &armies[a.army].groups[a.group];
+    // unwrap here is safe as |choices| is a collection of groups filtered by
+    // |is_some| above
+    let defender = &armies[attack.enemy_army()].groups[attack.enemy];
+    let attacker = &armies[attack.army].groups[attack.group];
     let damage = defender.calc_hit(attacker);
-    let defender_mut = &mut armies[a.enemy_army()].groups
-      [choices[a.army][a.group].unwrap() as usize];
+    let defender_mut = &mut armies[attack.enemy_army()].groups[attack.enemy];
     defender_mut.hit(damage);
   }
 
