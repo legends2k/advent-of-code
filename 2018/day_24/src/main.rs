@@ -13,10 +13,11 @@ use std::{
 #[grammar = "input.pest"]
 pub struct InputParser;
 
+#[derive(Copy, Clone)]
 struct Attacks(u8);
 
 impl Attacks {
-  fn is(&self, other: &Attacks) -> bool {
+  fn to(&self, other: &Attacks) -> bool {
     (other.0 & self.0) != 0
   }
 }
@@ -33,14 +34,14 @@ struct Group {
   damages: u16,
   id: u16,
   attack: Attacks,
-  initiative: u8,
+  initiative: i8,
   immunity: Attacks,
   weakness: Attacks,
 }
 
 impl Group {
-  fn effective_power(&self) -> u32 {
-    self.units * self.damages as u32
+  fn effective_power(&self) -> i32 {
+    self.units as i32 * self.damages as i32
   }
 
   fn is_alive(&self) -> bool {
@@ -52,6 +53,68 @@ impl Group {
 struct Army<'a> {
   groups: Vec<Group>,
   name: &'a str,
+}
+
+impl Army<'_> {
+  fn sort_for_attack(&self) -> Vec<u16> {
+    let mut ids: Vec<u16> = (0..self.groups.len() as u16).collect();
+    ids.sort_by_key(|i|
+      // descending sort
+      (
+        match self.groups[*i as usize].is_alive() {
+          true => 0,
+          false => 1,
+        }
+        -self.groups[*i as usize].effective_power(),
+        -self.groups[*i as usize].initiative,
+      ));
+    ids
+  }
+
+  fn choose_enemy(&self, order: &Vec<u16>, enemy: &Army) -> Vec<Option<u16>> {
+    let mut chosen = vec![false; enemy.groups.len()];
+    order
+      .iter()
+      .map(|i| -> Option<u16> {
+        if !self.groups[*i as usize].is_alive() {
+          return None;
+        }
+        let mut enemy_ids: Vec<_> = (0..self.groups.len()).collect();
+        enemy_ids.sort_by_cached_key(|&j| {
+          let attack = self.groups[*i as usize].attack;
+          let damage_by_i = match (
+            enemy.groups[j].immunity.to(&attack),
+            enemy.groups[j].weakness.to(&attack),
+          ) {
+            (true, false) => 0,
+            (false, false) => self.groups[*i as usize].effective_power(),
+            (false, true) => self.groups[*i as usize].effective_power() * 2,
+            (true, true) => unreachable!(),
+          };
+          (
+            match enemy.groups[j].is_alive() {
+              true => 0,
+              false => 1,
+            },
+            -damage_by_i,
+            -enemy.groups[j].effective_power(),
+            -enemy.groups[j].initiative,
+          )
+        });
+        match enemy_ids
+          .iter()
+          .filter(|&j| enemy.groups[*j].is_alive() && !chosen[*j])
+          .next()
+        {
+          Some(&c) => {
+            chosen[c] = true;
+            Some(c as u16)
+          }
+          None => None,
+        }
+      })
+      .collect()
+  }
 }
 
 // PrimInt is yet to get the BITS member; make a new trait.
@@ -145,7 +208,7 @@ fn main() -> Result<(), Box<dyn Error>> {
           damages: counts[2] as u16,
           id: next_group,
           attack,
-          initiative: counts[3] as u8,
+          initiative: counts[3] as i8,
           immunity: Attacks(immunities),
           weakness: Attacks(weaknesses),
         });
@@ -154,6 +217,20 @@ fn main() -> Result<(), Box<dyn Error>> {
       Rule::EOI => (),
       _ => unreachable!(),
     }
+  }
+
+  println!("Immune System");
+  let ids0 = armies[0].sort_for_attack();
+  let choices0 = armies[0].choose_enemy(&ids0, &armies[1]);
+  for (idx, &i) in ids0.iter().enumerate() {
+    println!("{i}: {:?}", choices0[idx as usize]);
+  }
+
+  println!("Infection");
+  let ids1 = armies[1].sort_for_attack();
+  let choices1 = armies[1].choose_enemy(&ids1, &armies[0]);
+  for (idx, &i) in ids1.iter().enumerate() {
+    println!("{i}: {:?}", choices1[idx as usize]);
   }
 
   Ok(())
