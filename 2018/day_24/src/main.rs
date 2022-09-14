@@ -1,15 +1,15 @@
+use num_traits::PrimInt;
 use pest::Parser;
 use pest_derive::Parser;
-
-#[derive(Parser)]
-#[grammar = "input.pest"]
-pub struct InputParser;
-
 use std::{
   collections::HashMap,
   error::Error,
   io::{self, Read},
 };
+
+#[derive(Parser)]
+#[grammar = "input.pest"]
+pub struct InputParser;
 
 struct Attack(u8);
 
@@ -33,13 +33,34 @@ impl Group {
   }
 }
 
-fn to_flag<'a>(
+// PrimInt is yet to get the BITS member; make a new trait.
+// https://stackoverflow.com/q/73711297/183120
+trait Bits {
+  const BITS: usize;
+}
+macro_rules! impl_bits {
+  ( $($ty:ident)* ) => {
+    $(
+      impl Bits for $ty {
+        const BITS: usize = Self::BITS as usize;
+      }
+    )*
+  };
+}
+impl_bits!(u8 u16 u32 u64 u128);
+
+fn to_flag<'a, T: Bits + PrimInt>(
   attack: &'a str,
-  attack_to_flag: &mut HashMap<&'a str, u8>,
-) -> Result<u8, Box<dyn Error>> {
+  attack_to_flag: &mut HashMap<&'a str, T>,
+) -> Result<T, Box<dyn Error>> {
   let n = attack_to_flag.len();
-  assert!(n <= 7);
-  Ok(*attack_to_flag.entry(attack).or_insert(1u8 << n))
+  let mask = T::one() << n;
+  match n < T::BITS {
+    true => Ok(*attack_to_flag.entry(attack).or_insert(mask)),
+    false => Err(Box::<dyn Error>::from(
+      "More than {T::BITS} attacks; insufficient bit-width.",
+    )),
+  }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -58,7 +79,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     match line.as_rule() {
       Rule::army_name => {
         current_army = line.as_str();
-        println!("Army: {}", current_army);
+        // Rust 2021’s introduced Python’s f-string style strings but no
+        // expressions allowed within.
+        // https://stackoverflow.com/a/70504075/183120
+        println!("Army: {current_army}");
         current_group = 0;
       }
       Rule::group => {
@@ -96,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => unreachable!(),
           }
         }
-        println!("  Group {}", current_group);
+        println!("  Group {current_group}");
         println!("    Units: {}", counts[0]);
         println!("    Hits: {}", counts[1]);
         println!(
