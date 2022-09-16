@@ -349,6 +349,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
   }
 
+  // Part 1
   if let Victor(Some(army), units_alive) = fight(armies.clone()) {
     println!(
       "{} wins with units: {}",
@@ -356,19 +357,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
   }
 
-  let mut boost = 1;
-  loop {
-    boost += 1;
+  // Part 2: binary search for minimal boost
+  let (mut lo_boost, mut hi_boost) = (1, 1500);
+  while lo_boost != hi_boost {
+    // Using integers means below is implicitly floor((L + R) / 2); a ceil
+    // implementation sets hi_boost = boost - 1 and lo_boost = boost.  Floor
+    // route stops on the right, while ceil on the left side of target.
+    let boost = (hi_boost + lo_boost) / 2;
     armies[0].boost(boost);
-    let v = fight(armies.clone());
-    if v.0 == Some(0) {
-      println!(
-        "Immune System wins with minimal boost {boost}; surviving units: {}",
-        v.1
-      );
-      break;
+    match fight(armies.clone()).0 {
+      Some(0) => hi_boost = boost,
+      _ => lo_boost = boost + 1,
     }
   }
+  armies[0].boost(hi_boost); // lo_boost = hi_boost anyway
+  println!(
+    "Immune System wins with minimal boost {hi_boost}; surviving units: {}",
+    fight(armies.clone()).1
+  );
 
   Ok(())
 }
