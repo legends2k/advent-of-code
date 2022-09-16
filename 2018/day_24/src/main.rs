@@ -37,46 +37,50 @@ impl fmt::Debug for AttackTypes {
   }
 }
 
+#[derive(Clone)]
 struct Group {
   units: u32,
   hits: u32,
-  damages: u32,
-  attack: AttackTypes,
+  damages: u16,
+  boost: u16,
   initiative: i8,
+  attack: AttackTypes,
   immunity: AttackTypes,
   weakness: AttackTypes,
 }
 
 impl Group {
-  fn effective_power(&self) -> i32 {
-    self.units as i32 * self.damages as i32
+  fn effective_power(&self) -> u32 {
+    self.units * (self.damages as u32 + self.boost as u32)
   }
 
   fn is_alive(&self) -> bool {
     self.units > 0
   }
 
-  fn calc_hit(&self, enemy: &Group) -> i32 {
+  fn calc_hit(&self, enemy: &Group) -> u32 {
     match (
       self.immunity.to(enemy.attack),
       self.weakness.to(enemy.attack),
     ) {
-      (true, false) => 0,
       (false, false) => enemy.effective_power(),
+      (true, false) => 0,
       (false, true) => enemy.effective_power() * 2,
       (true, true) => unreachable!(),
     }
   }
 
-  fn hit(&mut self, points: i32) {
+  fn hit(&mut self, points: u32) -> u32 {
     let org_units = self.units;
-    let units_lost = points as u32 / self.hits;
-    self.units = self.units.saturating_sub(units_lost);
-    dbg_print!("Units lost: {}\n", org_units - self.units);
+    let units_kill = points / self.hits;
+    self.units = self.units.saturating_sub(units_kill);
+    let units_lost = org_units - self.units;
+    dbg_print!("Units lost: {}\n", units_lost);
+    units_lost
   }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Army<'a> {
   groups: Vec<Group>,
   name: &'a str,
@@ -89,7 +93,7 @@ impl Army<'_> {
       // descending sort
       (
         !self.groups[*i as usize].is_alive(),
-        -self.groups[*i as usize].effective_power(),
+        -(self.groups[*i as usize].effective_power() as i32),
         -self.groups[*i as usize].initiative,
       ));
     ids
@@ -106,17 +110,25 @@ impl Army<'_> {
         }
         let mut enemy_ids: Vec<_> = (0..enemy.groups.len()).collect();
         enemy_ids.sort_by_cached_key(|&j| {
-          let damage_by_i = enemy.groups[j].calc_hit(&self.groups[i]);
           (
             !enemy.groups[j].is_alive(),
-            -damage_by_i,
-            -enemy.groups[j].effective_power(),
+            chosen[j],
+            -(enemy.groups[j].calc_hit(&self.groups[i]) as i32),
+            -(enemy.groups[j].effective_power() as i32),
             -enemy.groups[j].initiative,
           )
         });
+        // If chosen[j] wasn’t a field in sorting, we’ve to use |filter|, not
+        // |take_while| as top results might’ve been already chosen.
         match enemy_ids
           .iter()
-          .filter(|&j| enemy.groups[*j].is_alive() && !chosen[*j])
+          .take_while(|&&j| {
+            // Although not explicitly stated in puzzle, if this unit can’t deal
+            // any damage to any enemy unit, then don’t mark chosen.
+            enemy.groups[j].is_alive()
+              && !chosen[j]
+              && enemy.groups[j].calc_hit(&self.groups[i]) > 0
+          })
           .next()
         {
           Some(&c) => {
@@ -131,6 +143,12 @@ impl Army<'_> {
 
   fn is_alive(&self) -> bool {
     self.groups.iter().any(|g| g.is_alive())
+  }
+
+  fn boost(&mut self, points: u16) {
+    for g in &mut self.groups {
+      g.boost = points;
+    }
   }
 }
 
@@ -174,6 +192,91 @@ impl Attack {
   fn enemy_army(&self) -> usize {
     // make a bool and convert to integral as !1u8 = 254
     (self.army == 0) as usize
+  }
+}
+
+// Army ID and remaining units
+struct Victor(Option<u8>, u32);
+
+fn fight(mut armies: [Army; 2]) -> Victor {
+  while armies.iter().all(|a| a.is_alive()) {
+    let ids = [armies[0].sort_for_attack(), armies[1].sort_for_attack()];
+    let choices = [
+      armies[0].choose_enemy(&ids[0], &armies[1]),
+      armies[1].choose_enemy(&ids[1], &armies[0]),
+    ];
+
+    // Excessive debugging; turn on if needed.
+    // for (i, _) in armies.iter().enumerate() {
+    //   dbg_print!("Army {}\n", i);
+    //   for (idx, &j) in ids[i].iter().enumerate() {
+    //     dbg_print!(
+    //       "  Group {}: {} --> {:?}\n",
+    //       j,
+    //       armies[i].groups[j as usize].units,
+    //       choices[i][idx]
+    //     );
+    //   }
+    // }
+
+    // collect all alive groups with respective army ID
+    let mut fight: Vec<Attack> = ids[0]
+      .iter()
+      .zip(choices[0].iter())
+      .filter_map(|(&i, &choice)| {
+        match (armies[0].groups[i as usize].is_alive(), choice) {
+          (true, Some(enemy)) => Some(Attack {
+            army: 0,
+            group: i as usize,
+            enemy: enemy.into(),
+          }),
+          _ => None,
+        }
+      })
+      .chain(ids[1].iter().zip(choices[1].iter()).filter_map(
+        |(&j, &choice)| match (armies[1].groups[j as usize].is_alive(), choice)
+        {
+          (true, Some(enemy)) => Some(Attack {
+            army: 1,
+            group: j as usize,
+            enemy: enemy.into(),
+          }),
+          _ => None,
+        },
+      ))
+      .collect::<Vec<Attack>>();
+    // Attacks in this fight are only b/w alive groups from here on.
+    fight.sort_by_key(|a| -armies[a.army].groups[a.group].initiative);
+
+    let mut total_units_lost = 0;
+    for attack in &fight {
+      dbg_print!(
+        "{}'s Group {} --> {}'s Group {};  ",
+        armies[attack.army].name,
+        attack.group,
+        armies[attack.enemy_army()].name,
+        attack.enemy
+      );
+      let attacker = &armies[attack.army].groups[attack.group];
+      let defender = &armies[attack.enemy_army()].groups[attack.enemy];
+      let damage = defender.calc_hit(attacker);
+      let defender_mut = &mut armies[attack.enemy_army()].groups[attack.enemy];
+      total_units_lost += defender_mut.hit(damage);
+    }
+    if total_units_lost == 0 {
+      return Victor(None, 0);
+    }
+    dbg_print!("--------------\n");
+  }
+  match armies[0].is_alive() {
+    true => Victor(
+      Some(0),
+      armies[0].groups.iter().fold(0, |units, g| units + g.units),
+    ),
+    false => Victor(
+      Some(1),
+      armies[1].groups.iter().fold(0, |units, g| units + g.units),
+    ),
   }
 }
 
@@ -233,9 +336,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         armies[(next_army - 1) as usize].groups.push(Group {
           units: counts[0],
           hits: counts[1],
-          damages: counts[2],
-          attack,
+          damages: counts[2] as u16,
+          boost: 0,
           initiative: counts[3] as i8,
+          attack,
           immunity: AttackTypes(immunities),
           weakness: AttackTypes(weaknesses),
         });
@@ -245,78 +349,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
   }
 
-  while armies.iter().all(|a| a.is_alive()) {
-    let ids = [armies[0].sort_for_attack(), armies[1].sort_for_attack()];
-    let choices = [
-      armies[0].choose_enemy(&ids[0], &armies[1]),
-      armies[1].choose_enemy(&ids[1], &armies[0]),
-    ];
-
-    // Excessive debugging; turn on if needed.
-    // for (i, _) in armies.iter().enumerate() {
-    //   dbg_print!("Army {}\n", i);
-    //   for (idx, &j) in ids[i].iter().enumerate() {
-    //     dbg_print!(
-    //       "  Group {}: {} --> {:?}\n",
-    //       j,
-    //       armies[i].groups[j as usize].units,
-    //       choices[i][idx]
-    //     );
-    //   }
-    // }
-
-    // collect all alive groups with respective army ID
-    let mut fight: Vec<Attack> = ids[0]
-      .iter()
-      .filter(|&i| armies[0].groups[*i as usize].is_alive())
-      .enumerate()
-      .filter_map(|(idx, &i)| match choices[0][idx] {
-        Some(enemy) => Some(Attack {
-          army: 0,
-          group: i as usize,
-          enemy: enemy.into(),
-        }),
-        None => None,
-      })
-      .chain(
-        ids[1]
-          .iter()
-          .filter(|&j| armies[1].groups[*j as usize].is_alive())
-          .enumerate()
-          .filter_map(|(idx, &j)| match choices[1][idx] {
-            Some(enemy) => Some(Attack {
-              army: 1,
-              group: j as usize,
-              enemy: enemy.into(),
-            }),
-            None => None,
-          }),
-      )
-      .collect::<Vec<Attack>>();
-
-    fight.sort_by_key(|a| -armies[a.army].groups[a.group].initiative);
-
-    for attack in &fight {
-      dbg_print!(
-        "{}'s Group {} --> {}'s Group {};  ",
-        armies[attack.army].name,
-        attack.group,
-        armies[attack.enemy_army()].name,
-        attack.enemy
-      );
-      let defender = &armies[attack.enemy_army()].groups[attack.enemy];
-      let attacker = &armies[attack.army].groups[attack.group];
-      let damage = defender.calc_hit(attacker);
-      let defender_mut = &mut armies[attack.enemy_army()].groups[attack.enemy];
-      defender_mut.hit(damage);
-    }
-    dbg_print!("--------------\n");
-  }
-  if let Some(victor) = armies.iter().find(|&a| a.is_alive()) {
+  if let Victor(Some(army), units_alive) = fight(armies.clone()) {
     println!(
-      "Victor units: {}",
-      victor.groups.iter().fold(0, |units, g| units + g.units)
-    )
+      "{} wins with units: {}",
+      armies[army as usize].name, units_alive
+    );
+  }
+
+  let mut boost = 1;
+  loop {
+    boost += 1;
+    armies[0].boost(boost);
+    let v = fight(armies.clone());
+    if v.0 == Some(0) {
+      println!(
+        "Immune System wins with minimal boost {boost}; surviving units: {}",
+        v.1
+      );
+      break;
+    }
   }
 
   Ok(())
