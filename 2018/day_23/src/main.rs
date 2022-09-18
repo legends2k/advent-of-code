@@ -11,7 +11,6 @@ use std::{
 #[derive(Debug, Copy, Clone)]
 struct Point(f64, f64, f64);
 
-// Manhattan/Taxicab (L1) distance
 impl Sub for Point {
   type Output = Self;
 
@@ -20,6 +19,7 @@ impl Sub for Point {
   }
 }
 
+// Pair-wise addition using operator+
 impl Add for Point {
   type Output = Self;
 
@@ -47,7 +47,7 @@ impl Point {
     }
   }
 
-  // Sum of all basis components
+  // Component-wise addition; sum of all components
   fn sum(self) -> f64 {
     self.0 + self.1 + self.2
   }
@@ -94,6 +94,7 @@ struct Bot {
 
 impl Bot {
   fn is_point_in_range(&self, p: Point) -> bool {
+    // Manhattan/Taxicab (L1) distance
     (self.pos - p).abs().sum() <= self.radius
   }
 }
