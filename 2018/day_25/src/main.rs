@@ -68,6 +68,14 @@ impl Constellation {
   fn is_connected(&self, p: Point) -> bool {
     self.stars.iter().any(|s| s.dist(p) <= 3)
   }
+
+  fn add(&mut self, p: Point) {
+    self.stars.push(p);
+  }
+
+  fn merge(&mut self, other: &mut Self) {
+    self.stars.append(&mut other.stars);
+  }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -81,29 +89,31 @@ fn main() -> Result<(), Box<dyn Error>> {
   let mut forests = HashMap::<u32, Constellation>::with_capacity(points.len());
   for &p in points.iter() {
     dbg_print!("{:?}\n", p);
-    let part_of: Vec<_> = forests
+    let belongs: Vec<_> = forests
       .iter()
       .filter(|(_, f)| f.is_connected(p))
       .map(|(&id, _)| id)
       .collect();
-    if part_of.is_empty() {
+    if belongs.is_empty() {
       // Union-Find’s makeSet operation
       forests.insert(id, Constellation { stars: vec![p] });
       dbg_print!("  New constellation: {id}\n");
       id += 1;
     } else {
-      let base_const_idx = part_of[0];
-      forests.get_mut(&base_const_idx).unwrap().stars.push(p);
+      let base_forest = belongs[0];
+      // Unwraps below are OK since we know the keys exist.
+      forests.get_mut(&base_forest).unwrap().add(p);
       // Union-Find’s union operation
-      dbg_print!("  Added to {base_const_idx}\n");
-      for c in part_of.iter().skip(1) {
-        dbg_print!("    Constellation merged: {c}\n");
-        let mut constellation_to_kill = forests.remove(c).unwrap();
+      dbg_print!("  Added to {base_forest}\n");
+      for c in belongs.iter().skip(1) {
+        // Directly editing a value in a mutable hash map is disallowed:
+        // https://stackoverflow.com/a/30414450/183120
+        let mut merged_forest = forests.remove(c).unwrap();
         forests
-          .get_mut(&base_const_idx)
+          .get_mut(&base_forest)
           .unwrap()
-          .stars
-          .append(&mut constellation_to_kill.stars);
+          .merge(&mut merged_forest);
+        dbg_print!("    Constellation merged: {c}\n");
       }
     }
   }
