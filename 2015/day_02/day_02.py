@@ -23,8 +23,8 @@ boxes_ = [Box(*line.rstrip('\n').split('x', maxsplit=3)) for line in sys.stdin]
 
 # Part 1
 total_wrapper = sum((b.wrapper() for b in boxes_))
-print(total_wrapper)
+print(f'Total wrapper: {total_wrapper}')
 
 # Part 2
 total_ribbon = sum((b.ribbon() for b in boxes_))
-print(total_ribbon)
+print(f'Total ribbon: {total_ribbon}')
