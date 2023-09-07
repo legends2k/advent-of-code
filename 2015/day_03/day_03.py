@@ -9,10 +9,10 @@ signs = {ord(b'<'): (-1, 0),
          ord(b'>'): ( 1, 0),
          ord(b'v'): ( 0, 1),
          ord(b'^'): ( 0,-1)}
-pos = (0, 0)
-visited = {(0, 0): 1}
 
 # Part 1
+pos = (0, 0)
+visited = {(0, 0): 1}
 for s in input_:
   step = signs[s]
   pos = (step[0] + pos[0], step[1] + pos[1])
