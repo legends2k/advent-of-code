@@ -18,24 +18,35 @@ class Wire:
     for c in self.outputs:
       c.set(self.value)
 
+  def reset(self):
+    self.value = 0
+
 
 class BinaryGate:
 
   def __init__(self, op, output):
     self.inputs = [None, None]
     self.output = output
-    self.value = None
     self.op = op
+    self.fixed_input = None
+    self.value = None
 
-  def set(self, value):
-    if self.inputs[0] is None:
-      self.inputs[0] = value
-    else:
-      self.inputs[1] = value
+  def set(self, value, pin = None):
+    pin = pin if pin is not None else 0 if self.inputs[0] is None else 1
+    self.inputs[pin] = value
     if all(i is not None for i in self.inputs):
       self.value = self.op(*self.inputs)
       self.output.set(self.value)
 
+  def reset(self):
+    self.value = None
+    self.inputs = [None, None]
+    if self.fixed_input:
+      self.set(*self.fixed_input)
+
+  def set_fixed_input(self, value, pin):
+    self.fixed_input = (value, pin)
+    self.set(*self.fixed_input)
 
 circuit = {}
 battery = {}
@@ -77,11 +88,11 @@ for line in sys.stdin:
     if isinstance(input1, Wire):
       input1.connectOutput(gate)
     else:
-      gate.inputs[0] = input1
+      gate.set_fixed_input(input1, 0)
     if isinstance(input2, Wire):
       input2.connectOutput(gate)
     else:
-      gate.inputs[1] = input2
+      gate.set_fixed_input(input2, 1)
 
 for (wire, v) in battery.items():
   circuit[wire].set(v)
@@ -92,4 +103,17 @@ for (wire, v) in battery.items():
 #     print(f'{name}: {component.value}')
 
 # Part 1
+signal_a = circuit['a'].value
+print(signal_a)
+
+# Part 2
+battery['b'] = signal_a
+
+for components in circuit.values():
+  components.reset()
+
+# circuit['b'].set(signal_a) alone won’t work
+for (wire, v) in battery.items():
+  circuit[wire].set(v)
+
 print(circuit['a'].value)
