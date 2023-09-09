@@ -24,7 +24,7 @@ class Wire:
 
 class BinaryGate:
 
-  def __init__(self, op, output):
+  def __init__(self, output, op):
     self.inputs = [None, None]
     self.output = output
     self.op = op
@@ -51,12 +51,12 @@ class BinaryGate:
 circuit = {}
 battery = {}
 
-def getWire(s):
+def getWire(name):
   try:
-    i = int(s)
-    return i
+    i = int(name)
+    return (i, False)
   except ValueError:
-    return circuit.setdefault(s, Wire())
+    return (circuit.setdefault(name, Wire()), True)
 
 ops = { 'AND': lambda x, y: x & y,
         'OR': lambda x, y: x | y,
@@ -80,16 +80,17 @@ for line in sys.stdin:
       input_ = circuit.setdefault(toks[0], Wire())
       input_.connectOutput(output)
   elif toks[1] in ('AND', 'OR', 'RSHIFT', 'LSHIFT'):
-    input1 = getWire(toks[0])
-    input2 = getWire(toks[2])
+    (input1, isInput1Wire) = getWire(toks[0])
+    (input2, isInput2Wire) = getWire(toks[2])
     output = circuit.setdefault(toks[4], Wire())
     gate = circuit[' '.join(toks[0:3])] = \
-      BinaryGate(ops[toks[1]], output)
-    if isinstance(input1, Wire):
+      BinaryGate(output, ops[toks[1]])
+    # if input is a wire make gate its output else make it gate’s fixed input
+    if isInput1Wire:
       input1.connectOutput(gate)
     else:
       gate.set_fixed_input(input1, 0)
-    if isinstance(input2, Wire):
+    if isInput2Wire:
       input2.connectOutput(gate)
     else:
       gate.set_fixed_input(input2, 1)
