@@ -4,6 +4,7 @@ import sys
 import re
 import functools
 
+
 # Escape backslash though in raw strings as they’ve special meaning in regex
 # e.g. `\s` matches whitespace chars: `\\s` matches a backslash followed by s.
 pattern = re.compile(rb'(\\[\\"])|(\\x[0-9a-fA-F]{2})', flags=re.ASCII)
@@ -24,3 +25,13 @@ code, mem, enc = functools.reduce(
   (0, 0, 0))
 print(f'{code} - {mem} = {code-mem}')
 print(f'{enc} - {code} = {enc-code}')
+
+# Using `exec` for Part 1 is an option; eval works too but line-wise; missed
+# subtracting line count originally and switched to regex approach.  However if
+# input has `\n`, `\t`, …, not special as per puzzle rules, this won’t work.
+#
+# input_ = sys.stdin.read()
+# m = None
+# exec(f'm = len({input_})')
+# n = input_.count('\n')
+# print(len(input_) - m - n)
