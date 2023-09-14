@@ -7,8 +7,7 @@ locations = {}
 costs = {}
 
 for line in sys.stdin:
-  src, rest = line[:-1].split(' to ', maxsplit=2)
-  dst, cost = rest.split(' = ', maxsplit=2)
+  src, _, dst, _, cost = line[:-1].split(' ', maxsplit=5)
   s = locations.setdefault(src, len(locations))
   d = locations.setdefault(dst, len(locations))
   costs[(s, d)] = int(cost)
@@ -50,12 +49,8 @@ print(f'Longest route distance: {min_route[1]}')
 #                     -> b + f([a, c]) = (b, a, c), (b, c, a)
 #                     -> c + f([a, b]) = (c, a, b), (c, b, a)
 def permute(iterable):
-  n = len(iterable)
-  if n == 1:
-    return iterable
-  elif n == 2:
-    # return a list instead of tuple for uniform return type
-    return [(iterable[0], iterable[1]), (iterable[1], iterable[0])]
+  if len(iterable) == 1:
+    return [iterable]
   results = []
   for i in iterable:
     # Use a list for len(iterable) to work; no len(genexps)
