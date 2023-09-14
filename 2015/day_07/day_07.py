@@ -51,6 +51,9 @@ class BinaryGate:
 circuit = {}
 battery = {}
 
+# Return result of conversion as duck typing is idiomatic over isinstance.
+# Duck typing (EAFP) > isinstance() > type()
+# https://stackoverflow.com/a/1549854/183120
 def getWire(name):
   try:
     i = int(name)
