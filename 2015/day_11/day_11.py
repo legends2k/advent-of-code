@@ -17,14 +17,16 @@ def is_valid(p: bytes) -> bool:
     if cur in confusing:
       return False
     prev = p[i-1]
+    is_last = (i + 1) == len(p)
     if not straight:
-      if (i + 1) == len(p):
+      if is_last:
         return False
       else:
         next_ = p[i+1]
         if ((prev + 1) == cur) and (cur == (next_ - 1)):
           straight = True
-    if len(doubles) < 2 and cur == prev and cur != next and cur not in doubles:
+    if (len(doubles) < 2) and (cur == prev) and \
+       (is_last or cur != next_) and (cur not in doubles):
       doubles.append(cur)
   return straight and (len(doubles) >= 2)
 
