@@ -2,7 +2,7 @@
 
 import sys
 
-confusing = (105, 108, 111)
+confusing = (105, 108, 111)  # i, l, o
 alpha = b'abcdefghijklmnopqrstuvwxyz'
 digits = b'0123456789abcdefghijklmnop'
 lut = bytes.maketrans(alpha, digits)
@@ -49,8 +49,13 @@ def inc(p: bytes) -> bytes:
   n = int(p.translate(lut), base=26) + 1
   return int_to_pwd(n)
 
-input_ = sys.stdin.readline().rstrip().encode('utf8')
+def next_pwd(p: bytes) -> bytes:
+  while not is_valid(p):
+    p = inc(p)
+  return p
 
-while not is_valid(input_):
-  input_ = inc(input_)
-print(input_)
+input_ = sys.stdin.readline().rstrip().encode('utf8')
+p1 = next_pwd(input_)
+print(p1)
+p2 = next_pwd(inc(p1))
+print(p2)
