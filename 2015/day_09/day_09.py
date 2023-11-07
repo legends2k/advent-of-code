@@ -48,6 +48,8 @@ print(f'Longest route distance: {min_route[1]}')
 #                     -> a + f([b, c]) = (a, b, c), (a, c, b)
 #                     -> b + f([a, c]) = (b, a, c), (b, c, a)
 #                     -> c + f([a, b]) = (c, a, b), (c, b, a)
+#
+# See also: https://stackoverflow.com/a/55187334/183120
 def permute(iterable):
   if len(iterable) == 1:
     return [iterable]
