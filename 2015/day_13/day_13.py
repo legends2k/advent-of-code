@@ -25,7 +25,15 @@ for line in sys.stdin:
   happy[x].extend([0 for _ in range(y+1-len(happy[x]))])
   happy[x][y] = int(mag) * (-1 if sign[0] == 'l' else 1)
 
-count_knights = max(knights.values()) + 1
-
 # Day 1
-print(permute(count_knights, happy))
+print(permute(len(knights), happy))
+
+# Day 2
+knights['Me'] = len(knights)
+for l in happy:
+  l.append(0)
+# Append another zero; last filling was for Mallory-Mallory, not Mallory-Me.
+happy[-1].append(0)
+# Append ‘Me’ row.
+happy.append([0] * len(knights))
+print(permute(len(knights), happy))
