@@ -25,7 +25,7 @@ min_route = max(all_routes.items(), key=lambda p: p[1])
 print(f'Longest route distance: {min_route[1]}')
 
 
-# Hand-written, recursive implementation of non-desctrutive permutation;
+# Hand-written, recursive implementation of non-destructive permutation;
 # not part of the puzzle
 #
 # f([a, b, c, d]) -> a + f([b, c ,d])
