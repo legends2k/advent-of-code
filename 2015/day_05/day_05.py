@@ -5,6 +5,7 @@ import functools
 from collections import defaultdict
 
 
+# NOTE: bespoke implementation of itertools.pairwise
 def sliding_window(iterable: bytes, window: int):
   n = len(iterable)
   if window >= n:

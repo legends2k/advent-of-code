@@ -25,10 +25,10 @@ for line in sys.stdin:
   happy[x].extend([0 for _ in range(y+1-len(happy[x]))])
   happy[x][y] = int(mag) * (-1 if sign[0] == 'l' else 1)
 
-# Day 1
+# Part 1
 print(permute(len(knights), happy))
 
-# Day 2
+# Part 2
 knights['Me'] = len(knights)
 for l in happy:
   l.append(0)
