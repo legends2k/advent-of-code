@@ -1,0 +1,64 @@
+# https://github.com/github/gitignore/blob/master/C%2B%2B.gitignore
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Build
+/build*/
+CMakeLists.txt.user
+CMakeUserPresets.json
+/Silencer
+
+# clangd/lsp
+/.cache/
+compile_commands.json
+/.ccls-cache/
+
+# Emacs temporaries
+\#*#
+
+# tags file
+.tags
+
+# macOS
+.DS_Store
+
+# MSVC Debug
+*.pdb
+*.ilk
+*.exp
+
+# Visual Studio
+/.vs/
+
+*.log
