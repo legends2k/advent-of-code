@@ -10,6 +10,7 @@
 #include <iterator>
 #include <utility>
 #include <limits>
+#include <tuple>
 
 // Returns the number of decimal digits required to represent a number.
 unsigned digits(uint64_t number) {
@@ -19,19 +20,41 @@ unsigned digits(uint64_t number) {
   return static_cast<unsigned>(std::floor(std::log10(number))) + 1;
 }
 
-// Returns true if a number is made of two repeats of an integer sequence.
-bool has_repeat(uint64_t num, unsigned digits) {
-  // Cut the number into two halves and return true if they’re equal.
-  digits /= 2;
-  uint64_t half = 0;
+// Returns |count| least significant decimal digits of |number| along with
+// |number| chopped off |count| digits.  Assumes |count| ≤ digits(number);
+// undefined otherwise.
+auto least_significant(uint64_t number, unsigned count) {
+  uint64_t part = 0;
   uint64_t place = 1u;
-  for (auto i = 0u; i < digits; ++i) {
-    const auto value = num % 10;
-    half += value * place;
+  for (auto i = 0u; i < count; ++i) {
+    const auto value = number % 10;
+    part += value * place;
     place *= 10;
-    num /= 10;
+    number /= 10;
   }
-  return num == half;
+  return std::make_tuple(part, number);
+}
+
+// Returns number of repeats in |number| of an integer sub-sequence.
+int has_repeats(uint64_t number) {
+  const auto digits = ::digits(number);
+  // Cut number into [2, digits] pieces looking for repeats in each set.
+  for (auto cuts = 2u; cuts <= digits; ++cuts) {
+    if (digits % cuts != 0)
+      continue;
+    const auto seq_len = digits / cuts;
+    auto [seq, rest] = least_significant(number, seq_len);
+    for (auto i = 2u; i < cuts; ++i) {
+      const auto [new_seq, new_rest] = least_significant(rest, seq_len);
+      if (new_seq == seq)
+        rest = new_rest;
+      else
+        break;
+    }
+    if (rest == seq)
+      return cuts;
+  }
+  return 0;
 }
 
 // Returns two numbers as string views assuming the input is
@@ -49,7 +72,8 @@ int main() {
   std::string input;
   std::getline(std::cin, input, '\0');
   input.pop_back();
-  uint64_t invalids = 0;
+  uint64_t invalids_twice = 0u;
+  uint64_t invalids = 0u;
   for (const auto interval_range : input | std::views::split(',')) {
     const std::string_view interval(interval_range.cbegin(),
                                     interval_range.cend());
@@ -57,11 +81,11 @@ int main() {
     const uint64_t left = std::strtoull(a.data(), nullptr, 0);
     const uint64_t right = std::strtoull(b.data(), nullptr, 0);
     for (auto i = left; i <= right; ++i) {
-      const auto d = digits(i);
-      if ((d % 2) != 0)
-        continue;
-      invalids += has_repeat(i, d) ? i : 0u;
+      const auto repeat_count = has_repeats(i);
+      invalids_twice += (repeat_count == 2) ? i : 0u;
+      invalids += repeat_count ? i : 0u;
     }
   }
-  std::println("Sum of all invalids: {}", invalids);
+  std::println("Sum of all invalids with two repeats: {}", invalids_twice);
+  std::println("Sum of all invalids with atleast two repeats: {}", invalids);
 }
