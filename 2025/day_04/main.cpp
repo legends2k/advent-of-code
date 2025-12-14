@@ -37,12 +37,12 @@ struct Grid {
   size_t col() const { return columns - 2; }
   size_t row() const { return (data.size() / columns) - 2; }
 
-  bool cell(size_t c, size_t r) const {
-    return data[(r + 1) * columns + (c + 1)];
+  bool cell(Point p) const {
+    return data[(p.row + 1) * columns + (p.col + 1)];
   }
 
-  void clear(size_t c, size_t r) {
-    data[(r + 1) * columns + (c + 1)] = false;
+  void clear(Point p) {
+    data[(p.row + 1) * columns + (p.col + 1)] = false;
   }
 
   // https://en.wikipedia.org/wiki/Kernel_(image_processing)
@@ -50,10 +50,10 @@ struct Grid {
   // 1 1 1
   // 1 0 1
   // 1 1 1
-  uint8_t sum_adjacent_set(size_t x, size_t y) const {
-    const auto start1 = (y + 0) * columns + x;
-    const auto start2 = (y + 1) * columns + x;
-    const auto start3 = (y + 2) * columns + x;
+  uint8_t sum_adjacent_set(Point p) const {
+    const auto start1 = (p.row + 0) * columns + p.col;
+    const auto start2 = (p.row + 1) * columns + p.col;
+    const auto start3 = (p.row + 2) * columns + p.col;
     const auto r1 = std::accumulate(data.begin() + start1,
                                     data.begin() + start1 + 3,
                                     0u);
@@ -63,7 +63,7 @@ struct Grid {
     const auto r3 = std::accumulate(data.begin() + start3,
                                     data.begin() + start3 + 3,
                                     0u);
-    return r1 + r2 + r3 - cell(x, y);
+    return r1 + r2 + r3 - cell(p);
   }
 
 private:
@@ -87,7 +87,7 @@ int main() {
   std::vector<Point> liftable;
   for (auto r = 0u; r < g.row(); ++r)
     for (auto c = 0u; c < g.col(); ++c)
-      if (g.cell(c, r) && (g.sum_adjacent_set(c, r) < 4))
+      if (g.cell(Point(c, r)) && (g.sum_adjacent_set(Point(c, r)) < 4))
         liftable.emplace_back(c, r);
   std::println("Paper rolls accessible by forklifts: {}", liftable.size());
 
@@ -95,12 +95,12 @@ int main() {
   while (!liftable.empty()) {
     total_liftable += liftable.size();
     for (auto cell : liftable)
-      g.clear(cell.col, cell.row);
+      g.clear(cell);
     liftable.clear();
 
     for (auto r = 0u; r < g.row(); ++r)
       for (auto c = 0u; c < g.col(); ++c)
-        if (g.cell(c, r) && (g.sum_adjacent_set(c, r) < 4))
+        if (g.cell(Point(c, r)) && (g.sum_adjacent_set(Point(c, r)) < 4))
           liftable.emplace_back(c, r);
   }
   std::println("All paper rolls accessible by forklifts: {}", total_liftable);
