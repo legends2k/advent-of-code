@@ -70,8 +70,7 @@ int main() {
   std::cin.tie(nullptr);
 
   std::string input;
-  std::getline(std::cin, input, '\0');
-  input.pop_back();
+  std::getline(std::cin, input);
   uint64_t invalids_twice = 0u;
   uint64_t invalids = 0u;
   for (const auto interval_range : input | std::views::split(',')) {
