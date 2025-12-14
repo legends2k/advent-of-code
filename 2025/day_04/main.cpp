@@ -10,6 +10,13 @@
 #include <print>
 #include <cassert>
 
+struct Point {
+  Point(size_t c = 0, size_t r = 0) : col(c), row(r) { }
+
+  size_t col = 0;
+  size_t row = 0;
+};
+
 struct Grid {
   Grid(size_t cols) : columns(cols + 2) {
     data.assign(columns, false);
@@ -32,6 +39,10 @@ struct Grid {
 
   bool cell(size_t c, size_t r) const {
     return data[(r + 1) * columns + (c + 1)];
+  }
+
+  void clear(size_t c, size_t r) {
+    data[(r + 1) * columns + (c + 1)] = false;
   }
 
   // https://en.wikipedia.org/wiki/Kernel_(image_processing)
@@ -73,10 +84,24 @@ int main() {
     g.add_row(line);
   g.finalize();
 
-  uint32_t liftable_rolls = 0u;
+  std::vector<Point> liftable;
   for (auto r = 0u; r < g.row(); ++r)
     for (auto c = 0u; c < g.col(); ++c)
-      liftable_rolls += g.cell(c, r) && (g.sum_adjacent_set(c, r) < 4);
+      if (g.cell(c, r) && (g.sum_adjacent_set(c, r) < 4))
+        liftable.emplace_back(c, r);
+  std::println("Paper rolls accessible by forklifts: {}", liftable.size());
 
-  std::println("Paperrolls accessible by forklifts: {}", liftable_rolls);
+  size_t total_liftable = 0u;
+  while (!liftable.empty()) {
+    total_liftable += liftable.size();
+    for (auto cell : liftable)
+      g.clear(cell.col, cell.row);
+    liftable.clear();
+
+    for (auto r = 0u; r < g.row(); ++r)
+      for (auto c = 0u; c < g.col(); ++c)
+        if (g.cell(c, r) && (g.sum_adjacent_set(c, r) < 4))
+          liftable.emplace_back(c, r);
+  }
+  std::println("All paper rolls accessible by forklifts: {}", total_liftable);
 }
