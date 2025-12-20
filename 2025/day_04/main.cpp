@@ -18,6 +18,7 @@ struct Point {
 };
 
 struct Grid {
+  // Create grid with boundary on all sides (convolution) for easy mask read.
   Grid(size_t cols) : columns(cols + 2) {
     data.assign(columns, false);
   }
@@ -75,7 +76,6 @@ int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
 
-  // Create grid with boundary on all sides (convolution) for easy mask read.
   std::string line;
   std::getline(std::cin, line);
   Grid g(line.size());
