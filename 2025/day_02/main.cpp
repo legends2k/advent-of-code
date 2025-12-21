@@ -73,7 +73,7 @@ int main() {
   std::getline(std::cin, input);
   uint64_t invalids_twice = 0u;
   uint64_t invalids = 0u;
-  for (const auto interval_range : input | std::views::split(',')) {
+  for (auto&& interval_range : input | std::views::split(',')) {
     const std::string_view interval(interval_range.cbegin(),
                                     interval_range.cend());
     const auto [a, b] = split(interval);
