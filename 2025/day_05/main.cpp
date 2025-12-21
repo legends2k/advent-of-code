@@ -134,6 +134,11 @@ struct IntervalSet {
     return false;
   }
 
+  using const_iterator = std::set<Interval>::const_iterator;
+
+  const_iterator cbegin() const noexcept { return m_intervals.cbegin(); }
+  const_iterator cend() const noexcept { return m_intervals.cend(); }
+
 private:
   std::set<Interval> m_intervals;
 };
@@ -142,10 +147,10 @@ int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
 
-  IntervalSet s;
+  IntervalSet intervals;
   std::string line;
   bool parsing_intervals = true;
-  uint64_t total_fresh = 0u;
+  uint64_t fresh_queried = 0u;
   while (std::getline(std::cin, line)) {
     if (line.empty())
       parsing_intervals = false;
@@ -156,13 +161,18 @@ int main() {
       uint64_t x = 0u, y = 0u;
       std::from_chars(left.data(), left.data() + left.size(), x);
       std::from_chars(right.data(), right.data() + right.size(), y);
-      s.add(Interval(x, y));
+      intervals.add(Interval(x, y));
     }
     else {
       uint64_t x;
       std::from_chars(line.data(), line.data() + line.size(), x);
-      total_fresh += s.is_present(x);
+      fresh_queried += intervals.is_present(x);
     }
   }
-  std::println("Total fresh ingredients: {}", total_fresh);
+  std::println("Queried Fresh ingredients: {}", fresh_queried);
+
+  uint64_t fresh_total = 0u;
+  for (auto it = intervals.cbegin(); it != intervals.cend(); ++it)
+    fresh_total += it->length();
+  std::println("All fresh ingredients: {}", fresh_total);
 }
