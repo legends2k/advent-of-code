@@ -1,12 +1,16 @@
+#include <algorithm>
+#include <concepts>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
+#include <iterator>
+#include <limits>
+#include <numeric>
+#include <optional>
 #include <print>
 #include <string>
 #include <utility>
 #include <vector>
-#include <algorithm>
-#include <iterator>
 
 struct Simulation {
   Simulation(std::vector<char> manifold, size_t width)
@@ -45,16 +49,86 @@ struct Simulation {
     return splits;
   }
 
+  // Returns the number of worlds the beam entered.
+  size_t run_many_worlds() const {
+    using uint = uint64_t;
+    constexpr auto DOT = std::numeric_limits<uint>::min();
+    constexpr auto CAP = std::numeric_limits<uint>::max();
+    std::vector<uint> m(manifold.size(), DOT);
+    // Transform-Copy to u64 skipping the first line with 'S'.
+    std::transform(manifold.cbegin() + width,
+                   manifold.cend(),
+                   m.begin() + width,
+                   [](char c) { return (c == '^') ? CAP : DOT; });
+    std::vector<size_t> prev, next;  // store only X
+    prev.reserve(width);
+    next.reserve(width);
+    const auto start = get_start().value();
+    set(&m, start /*x*/, 0u /*y*/, uint(1));
+    prev.push_back(start);
+    for (auto y = 1u; y < height(); ++y) {
+      for (const auto x: prev) {
+        const auto beams_in = get(m, x, y - 1u);
+        const auto beams = get(m, x, y);
+        switch (beams) {
+        case DOT:
+        {
+          set(&m, x, y, beams_in);
+          next.push_back(x);
+        }
+        break;
+        case CAP:
+        {
+          const auto beams_left = get(m, x - 1, y);
+          const auto beams_right = get(m, x + 1, y);
+          set(&m, x - 1, y, beams_left + beams_in);
+          set(&m, x + 1, y, beams_right + beams_in);
+          if (!beams_left)
+            next.push_back(x - 1);
+          if (!beams_right)
+            next.push_back(x + 1);
+        }
+        break;
+        default:
+          set(&m, x, y, beams + beams_in);
+        }
+      }
+      prev.clear();
+      std::swap(prev, next);
+    }
+
+#ifdef DEBUG_PRINT
+    for (auto r = 0u; r < height(); ++r) {
+      for (auto c = 0u; c < width; ++c) {
+        const auto value = get(m, c, r);
+        if (value == CAP)
+          std::print("^");
+        else if (value == DOT)
+          std::print(".");
+        else
+          std::print("{}", value);
+      }
+      std::println();
+    }
+#endif
+
+    return std::accumulate(m.cbegin() + (width * (height() - 1u)),
+                           m.cend(),
+                           uint(0));
+  }
+
   size_t height() const {
     return manifold.size() / width;
   }
 
-  void set(std::vector<char>* m, size_t x, size_t y, char c) const {
+  template <std::integral T>
+  void set(std::vector<T>* m, size_t x, size_t y, T c) const {
     const auto offset = width * y + x;
     (*m)[offset] = c;
   }
 
-  char get(const std::vector<char>& m, size_t x, size_t y) const {
+  template <std::integral T>
+  T get(const std::vector<T>& m, size_t x, size_t y) const {
     const auto offset = width * y + x;
     return m[offset];
   }
@@ -114,4 +188,5 @@ int main() {
   }
   Simulation sim{std::move(manifold), columns};
   std::println("Tachyon Beam Splits: {}", sim.run());
+  std::println("Tachyon Worlds: {}", sim.run_many_worlds());
 }
