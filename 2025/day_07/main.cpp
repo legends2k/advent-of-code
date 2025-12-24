@@ -16,28 +16,24 @@ struct Simulation {
   }
 
   // Returns the number of Tachyon beam splits.
-  size_t run() {
-    const auto it = std::find(manifold.cbegin(),
-                              manifold.cbegin() + width,
-                              'S');
-    if (*it != 'S')
-      return 0u;
-    const size_t start = std::distance(manifold.cbegin(), it);
-    std::vector<size_t> prev, next;
+  size_t run() const {
+    // Copy manifold as we want it clean for other runs.
+    std::vector<char> m{manifold};
+    std::vector<size_t> prev, next;  // store only X
     prev.reserve(width);
     next.reserve(width);
-    prev.push_back(start);
+    prev.push_back(get_start().value());
     size_t splits = 0u;
     for (auto y = 1u; y < height(); ++y) {
       for (const auto x: prev) {
-        switch (get(x, y)) {
+        switch (get(m, x, y)) {
         case '.':
-          set(x, y, '|');
+          set(&m, x, y, '|');
           next.push_back(x);
           break;
         case '^':
-          set(x - 1, y, '|');
-          set(x + 1, y, '|');
+          set(&m, x - 1, y, '|');
+          set(&m, x + 1, y, '|');
           next.push_back(x - 1);
           next.push_back(x + 1);
           splits++;
@@ -53,23 +49,30 @@ struct Simulation {
     return manifold.size() / width;
   }
 
-  // Returns true if a |c| is set on the manifold at |x, y|.
-  void set(size_t x, size_t y, char c) {
+  void set(std::vector<char>* m, size_t x, size_t y, char c) const {
     const auto offset = width * y + x;
-    manifold[offset] = c;
+    (*m)[offset] = c;
   }
 
-  // Returns char if within bounds.
-  char get(size_t x, size_t y) const {
+  char get(const std::vector<char>& m, size_t x, size_t y) const {
     const auto offset = width * y + x;
-    return manifold[offset];
+    return m[offset];
+  }
+
+  std::optional<size_t> get_start() const {
+    const auto it = std::find(manifold.cbegin(),
+                              manifold.cbegin() + width,
+                              'S');
+    if (*it != 'S')
+      return {};
+    return std::distance(manifold.cbegin(), it);
   }
 
   friend struct std::formatter<Simulation>;
 
 private:
-  std::vector<char> manifold;
-  size_t width;
+  const std::vector<char> manifold;
+  const size_t width;
 };
 
 // Simulation manifold to string (for debugging).
