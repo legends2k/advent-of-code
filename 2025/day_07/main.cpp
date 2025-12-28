@@ -1,4 +1,3 @@
-#include <format>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
@@ -8,11 +7,6 @@
 #include <vector>
 #include <algorithm>
 #include <iterator>
-
-namespace std {
-template <typename _Tp, typename _CharT>
-struct formatter;
-}
 
 struct Simulation {
   Simulation(std::vector<char> manifold, size_t width)
