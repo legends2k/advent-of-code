@@ -10,7 +10,6 @@
 #include <iterator>
 #include <utility>
 #include <limits>
-#include <tuple>
 
 // Returns the number of decimal digits required to represent a number.
 unsigned digits(uint64_t number) {
@@ -32,7 +31,7 @@ auto least_significant(uint64_t number, unsigned count) {
     place *= 10;
     number /= 10;
   }
-  return std::make_tuple(part, number);
+  return std::make_pair(part, number);
 }
 
 // Returns number of repeats in |number| of an integer sub-sequence.
