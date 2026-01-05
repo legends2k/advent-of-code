@@ -2,6 +2,7 @@
 #include <concepts>
 #include <cstdint>
 #include <cstdio>
+#include <format>
 #include <iostream>
 #include <iterator>
 #include <limits>
