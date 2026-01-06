@@ -66,13 +66,29 @@ using Box = uint16_t;
 using Circuit = uint16_t;
 constexpr Box INVALID_BOX = std::numeric_limits<Box>::max();
 
-struct Closest {
+struct Connection {
   std::pair<Box, Box> boxes{INVALID_BOX, INVALID_BOX};
   float distance = std::numeric_limits<float>::infinity();
 };
 
-bool operator>(const Closest& a, const Closest& b) {
+bool operator>(const Connection& a, const Connection& b) {
   return a.distance > b.distance;
+}
+
+std::vector<Connection>
+calculate_distances(const std::vector<Point>& positions) {
+  const size_t n = positions.size();
+  // Out of an n × n table only the right-top triangle is filled.
+  // Summation is n(n+1)/2 but reduce one as we skip self tests.
+  std::vector<Connection> c;
+  c.reserve(n * (n - 1u) / 2);
+  for (Box i = 0u; i < n; ++i) {
+    for (Box j = i + 1; j < n; ++j) {
+      const float d = distance(positions[i], positions[j]);
+      c.push_back({{i, j}, d});
+    }
+  }
+  return c;
 }
 
 int main() {
@@ -105,28 +121,19 @@ int main() {
     positions.push_back(Point{f[0], f[1], f[2]});
   }
 
-  const size_t n = positions.size();
-  // Out of an n × n table only the right-top triangle is filled.
-  // summation: n(n+1) ÷ 2 but reduce one as we skip self tests.
-  std::vector<Closest> closest;
-  closest.reserve(n * (n - 1u) / 2);
-  for (Box i = 0u; i < n; ++i) {
-    for (Box j = i + 1; j < n; ++j) {
-      const float d = distance(positions[i], positions[j]);
-      closest.push_back({{i, j}, d});
-    }
-  }
-
-  std::priority_queue<Closest, std::vector<Closest>, std::greater<>> pq{
-    std::greater<>{}, std::move(closest)
+  std::priority_queue<Connection, std::vector<Connection>, std::greater<>> pq{
+    std::greater<>{}, calculate_distances(positions)
   };
   Circuit next_circuit = 0u;
   std::unordered_map<Box, Circuit> box2circuit;
   std::unordered_map<Circuit, std::vector<Box>> circuit2box;
-  // NOTE: Change limit to 10 for sample input.
-  for (auto i = 0u; i < 1000; ++i) {
+  Connection unify;
+  uint32_t i = 0u;
+  size_t top[4] = {};
+  while (!pq.empty()) {
     const auto p = pq.top();
     pq.pop();
+    ++i;
     auto it1 = box2circuit.find(p.boxes.first);
     auto it2 = box2circuit.find(p.boxes.second);
     if ((it1 != box2circuit.cend()) && (it2 != box2circuit.cend())) {
@@ -158,15 +165,30 @@ int main() {
       box2circuit[p.boxes.first] = it2->second;
       circuit2box[it2->second].push_back(p.boxes.first);
     }
-  }
 
-  size_t top[4] = {};
-  for (const auto& [circuit, boxes] : circuit2box) {
-    if (top[3] < boxes.size()) {
-      top[3] = boxes.size();
-      std::sort(std::begin(top), std::end(top), std::greater{});
+    // Part 1: sort out top 3 populated circuits at threshold.
+    // NOTE: Set this to 10 for sample input
+    if (i == 1000) {
+      for (const auto& [circuit, boxes] : circuit2box) {
+        if (top[3] < boxes.size()) {
+          top[3] = boxes.size();
+          std::sort(std::begin(top), std::end(top), std::greater{});
+        }
+      }
+    }
+
+    // Part 2: terminate loop if we just made the final unifying connection.
+    if (auto it3 = circuit2box.cbegin();
+        ((it3 != circuit2box.cend()) &&
+         (it3->second.size() == positions.size()))) {
+      unify = p;
+      break;
     }
   }
+
   std::println("Product of sizes of the three largest circuits: {}",
                top[0] * top[1] * top[2]);
+  const auto x1 = positions[unify.boxes.first].x;
+  const auto x2 = positions[unify.boxes.second].x;
+  std::println("Product of unifying boxes' X coordinates: {}", x1 * x2);
 }
