@@ -30,6 +30,9 @@ foreach (subdir ${CHILD_DIRS})
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
       )
+      target_compile_options(${subdir} PRIVATE
+        $<$<AND:$<CONFIG:Release,MinSizeRel,RelWithDebInfo>,$<CXX_COMPILER_ID:GNU,Clang,AppleClang>>:-march=native -ffast-math>
+      )
     endif()
   endif()
 endforeach ()
