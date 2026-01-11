@@ -58,7 +58,7 @@ int main() {
           ((stop == 0.0f) && (dir == 1.0f)))
           crosses--;
     }
-    zero_crosses += crosses;
+    zero_crosses += static_cast<uint32_t>(crosses);
     zero_stops += (stop == 0.0f);
     start = stop;
   }

@@ -31,6 +31,7 @@ foreach (subdir ${CHILD_DIRS})
         CXX_EXTENSIONS OFF
       )
       target_compile_options(${subdir} PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wfloat-conversion -pedantic -pedantic-errors>
         $<$<AND:$<CONFIG:Release,MinSizeRel,RelWithDebInfo>,$<CXX_COMPILER_ID:GNU,Clang,AppleClang>>:-march=native -ffast-math>
       )
     endif()
