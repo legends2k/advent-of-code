@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <print>
@@ -12,19 +13,18 @@
 
 #ifndef NDEBUG
 #  include <format>
-#endif
-
+#endif // NDEBUG
 struct Point {
   float x = std::numeric_limits<float>::infinity();
   float y = std::numeric_limits<float>::infinity();
 
   Point() = default;
-  Point(float a, float b) : x{a}, y{b} {};
+  Point(float a, float b) : x{a}, y{b} {}
   Point(std::string_view s) {
     const auto i = s.find(",");
     const auto p = s.substr(0, i);
     const auto q = s.substr(i + 1);
-    std::from_chars(p.data(), q.data() + p.size(), x);
+    std::from_chars(p.data(), p.data() + p.size(), x);
     std::from_chars(q.data(), q.data() + q.size(), y);
   }
 };
@@ -36,9 +36,25 @@ bool operator==(Point a, Point b) {
 struct Rect {
   Point p[2];
 
-  float area() const {
-    return (1.0f + std::abs(p[0].x - p[1].x)) *
-      (1.0f + std::abs(p[0].y - p[1].y));
+  double area() const {
+    return (1.0 + std::abs(p[0].x - p[1].x)) *
+      (1.0 + std::abs(p[0].y - p[1].y));
+  }
+
+  float left() const {
+    return std::min(p[0].x, p[1].x);
+  }
+
+  float right() const {
+    return std::max(p[0].x, p[1].x);
+  }
+
+  float top() const {
+    return std::min(p[0].y, p[1].y);
+  }
+
+  float bottom() const {
+    return std::max(p[0].y, p[1].y);
   }
 
   auto others() const {
@@ -81,7 +97,7 @@ struct Polygon {
     Point prev;
     prev = points.front();
     auto delta = 0.0f;
-    for (auto i = 0; i <= N; ++i) {
+    for (auto i = 0u; i <= N; ++i) {
       auto cur = points[i % N];
       delta = (cur.y > prev.y) ? 1.0f : ((cur.y < prev.y) ? -1.0f : 0.0f);
       for (auto y = prev.y + delta; y != cur.y; y += delta)
@@ -92,18 +108,28 @@ struct Polygon {
   }
 
   bool is_inside(Point p) const {
-    const auto it = bounds.find(p.y);
+    const auto it = bounds.find(static_cast<uint32_t>(p.y));
     return (it != bounds.cend()) ? it->second.contains_point(p.x) : false;
+  }
+
+  bool contains(Rect r) const {
+    const auto left = r.left();
+    const auto right = r.right();
+    for (auto y = r.top(); y <= r.bottom(); ++y) {
+      if (!is_inside(Point{left, y}) || !is_inside(Point{right, y}))
+        return false;
+    }
+    return true;
   }
 
 private:
   void set(Point p) {
-    auto& line = bounds[p.y];
+    auto& line = bounds[static_cast<uint32_t>(p.y)];
     line.left = std::min(p.x, line.left);
     line.right = std::max(p.x, line.right);
   }
 
-  std::unordered_map<float, Line> bounds;
+  std::unordered_map<uint32_t, Line> bounds;
 };
 
 int main() {
@@ -117,10 +143,10 @@ int main() {
   const auto N = reds.size();
 
   // Part 1
-  float max_area = -std::numeric_limits<float>::infinity();
+  double max_area = -std::numeric_limits<float>::infinity();
   for (auto i = 0u; i < N; ++i) {
-    for (auto j = i + 1; j < reds.size(); ++j) {
-      const float area = Rect{reds[i], reds[j]}.area();
+    for (auto j = i + 1; j < N; ++j) {
+      const double area = Rect{reds[i], reds[j]}.area();
       max_area = std::max(max_area, area);
     }
   }
@@ -140,15 +166,14 @@ int main() {
   //
 
   // Iterate every point with 2 preceding and trailing ones.
-  float max_area_within = -std::numeric_limits<float>::infinity();
+  double max_area_within = -std::numeric_limits<float>::infinity();
   for (auto i = 0u; i < N; ++i) {
-    const auto p1 = reds[i];
-    const auto p2 = reds[(i + 1) % N];
-    const auto p3 = reds[(i + 2) % N];
-    const auto r = Rect{p1, p3};
-    auto [p41, p42] = r.others();
-    if (p.is_inside((p41 == p2) ? p42 : p41))
-      max_area_within = std::max(max_area_within, r.area());
+    for (auto j = i + 1; j < reds.size(); ++j) {
+      const Rect r{reds[i], reds[j]};
+      const double area = r.area();
+      if ((area > max_area_within) && p.contains(r))
+        max_area_within = area;
+    }
   }
   std::println("Maximum area rectangle formed by red-green tiles: {}",
                max_area_within);
